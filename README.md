@@ -130,9 +130,34 @@ Assumptions about the company that remain unvalidated are recorded explicitly in
 it. One assumption decides an entire family of tenders — leaving it implicit in
 the labels would make it invisible when it turns out to be wrong.
 
+## Running it
+
+```sh
+cp .env.example .env      # optional — the defaults work
+docker compose up -d
+curl localhost:8010/health
+```
+
+```json
+{"status":"ok","pgvector":true,"contratacoes":0,"ultima_ingestao":null}
+```
+
+`ultima_ingestao` is in the healthcheck deliberately. An empty corpus because
+the last ingestion failed and an empty corpus because there was nothing to
+ingest look identical from the outside, and the first one is the failure that
+makes a user miss a deadline.
+
+Ports default to 5440 (Postgres) and 8010 (API) to stay clear of the usual
+local occupants; override in `.env`.
+
 ## Repository layout
 
 ```
+app/
+  main.py               FastAPI app and healthcheck
+  db.py                 Connection pool, value normalisation
+sql/
+  001_schema.sql        Tables, applied on first container start
 docs/
   corpus-notes.md       Findings from the live PNCP API and what they changed
 evals/
