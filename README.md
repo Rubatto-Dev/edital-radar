@@ -122,10 +122,6 @@ each one breaks a cheap filter if that filter is naive — a tender outside the
 served states, one below the viability floor, one whose value is confidential,
 one published twice under different keys.
 
-How badly does keyword matching actually do? A keyword pass over 1,200 real
-records returned 7 candidates, 1 of which was a true positive. **~14% precision**,
-measured on this corpus. That number is the reason this project exists.
-
 Target metrics:
 
 | Metric | Target | Rationale |
@@ -135,6 +131,39 @@ Target metrics:
 
 Recall is weighted above precision deliberately: the asymmetry of cost in this
 domain is severe.
+
+### Current numbers
+
+`python -m evals.run` scores any classifier against the set. Two baselines ship
+with it, so every later number has something to be a delta from:
+
+| Classifier | Recall | Precision | Passes |
+|---|---|---|---|
+| Alert on everything | 1.000 | 0.382 | no |
+| Keyword match (the incumbent) | 1.000 | 0.448 | no |
+
+Neither passes, which is the point: the floor is established before the
+interesting work starts. If a baseline ever passed, the target would be too
+easy or the set too kind.
+
+### Two numbers that look contradictory and are not
+
+A keyword pass over 1,200 raw corpus records returned 7 candidates, 1 of them
+a true positive — roughly **14% precision**. The same keyword classifier scores
+**0.448** on the evaluation set. Both are correct; they measure different
+things.
+
+Precision depends on base rate. Relevant tenders are ~38% of the evaluation set
+and ~0.5% of the live corpus — two orders of magnitude apart. **Evaluation-set
+precision is valid for comparing classifiers to each other, and invalid as a
+claim about the product.** The runner prints this caveat on every run, because
+the number is quotable and easy to quote wrongly.
+
+The second caveat is worse and also printed: keyword scores **recall 1.000**
+here, which is not a good result but a symptom. The positives were collected by
+keyword search, so the set cannot contain a positive that keyword misses. Real
+recall is unknown and probably lower. Phase 3 fixes both by drawing a random
+sample from the corpus and labeling it blind.
 
 ### Three output classes, not two
 
@@ -219,6 +248,7 @@ tests/
   test_pncp.py          Client retry and text-cleaning contract
   test_ingest.py        Ingestion outcome contract (ok / parcial / falha)
   test_filtros.py       Layer 1 must never drop a relevant tender
+  test_eval_runner.py   Scoring rules, and that no baseline passes
 sql/
   001_schema.sql        Tables, applied on first container start
 docs/
@@ -226,6 +256,8 @@ docs/
 evals/
   perfil-empresa.yaml   Company profile — defines what "relevant" means
   eval-set.yaml         Labeled real tenders, built pre-implementation
+  run.py                Scorer + method caveats printed on every run
+  classificadores.py    Baselines to beat
 ```
 
 ## License

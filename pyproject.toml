@@ -14,7 +14,8 @@ dependencies = [
 dev = ["pytest>=8.3"]
 
 [tool.setuptools]
-packages = ["app"]
+packages = ["app", "evals"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
