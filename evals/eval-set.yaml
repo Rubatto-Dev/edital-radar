@@ -94,6 +94,126 @@ casos:
       ambíguo mas o restante é software. Positivo com menos convicção que os
       anteriores — bom caso pra medir calibração de confiança.
 
+  # ---------- POSITIVOS QUE TESTAM OS FILTROS ESTRUTURAIS ----------
+  # Não estão aqui por serem difíceis de classificar — são positivos claros.
+  # Estão aqui porque cada um quebra um filtro barato se ele for ingênuo.
+
+  - id: pos-07
+    dificuldade: facil
+    pncp: 06939919000121-1-000014/2026
+    uf: ES   # FORA de ufs_atendidas (PR/SC/RS/SP)
+    valor: 124412.16
+    objeto: >
+      Contratação de empresa especializada para fornecimento, implantação,
+      customização, manutenção e suporte técnico de Sistema Integrado de Gestão
+      Pública, 100% web, em ambiente cloud, incluindo os módulos de Almoxarifado,
+      Patrimônio, Contabilidade e Folha de Pagamento.
+    rotulo: relevante
+    por_que: >
+      O produto exato da empresa. TESTA O FILTRO GEOGRÁFICO: o ES está fora de
+      `ufs_atendidas`. Se o sistema descartar por UF, este caso vira o teste que
+      força a decisão explícita — o filtro geográfico é uma preferência
+      comercial, não uma impossibilidade técnica, e um edital assim talvez
+      mereça alerta com ressalva em vez de silêncio.
+
+  - id: pos-08
+    dificuldade: facil
+    pncp: 03442597000112-1-000131/2025
+    uf: MS
+    valor: 27780.00   # ABAIXO de valor_minimo_viavel (50000)
+    objeto: >
+      Contratação de empresa especializada para fornecimento de licença de uso
+      (locação) de software de gestão ambiental, incluindo serviços necessários
+      à sua implantação, treinamento, suporte técnico e manutenção.
+    rotulo: relevante
+    por_que: >
+      Licenciamento de software de gestão com implantação e suporte — o core.
+      TESTA `valor_minimo_viavel`: R$ 27.780 está abaixo do piso de R$ 50k.
+      Mede se o corte por valor descarta um edital que é qualitativamente
+      perfeito.
+
+  - id: pos-09
+    dificuldade: facil
+    pncp: 95422911000113-1-000029/2026
+    uf: PR
+    valor: 844701.83
+    objeto: >
+      Contratação de empresa especializada em desenvolvimento de software
+      visando o fornecimento (locação de licença), instalação, manutenção e
+      suporte de sistema integrado de gestão pública municipal, com acesso
+      ilimitado de usuários.
+    rotulo: relevante
+    por_que: Caso canônico. Desenvolvimento próprio + licenciamento + gestão pública municipal.
+
+  - id: pos-10
+    dificuldade: facil
+    pncp: 90836693000140-1-000435/2026
+    uf: RS
+    valor: 838351.20
+    objeto: >
+      Prestação de serviços continuados de licenciamento de uso de Sistema
+      Informatizado de Gestão em Saúde Pública, na modalidade Software as a
+      Service (SaaS) em nuvem, incluindo implantação, migração de dados,
+      treinamento e manutenção.
+    rotulo: relevante
+    por_que: >
+      SaaS de gestão pública em saúde com migração e treinamento — casa item a
+      item com `fornece`. Contraste direto com neg-10 (SaaS da Salesforce): a
+      palavra SaaS é a mesma, o rótulo é oposto. É o par que mede se o sistema
+      aprendeu "software próprio" vs. "revenda".
+
+  - id: pos-11
+    dificuldade: dificil
+    pncp: 33683111000107-1-000051/2026
+    uf: DF   # fora de ufs_atendidas
+    valor: null   # veio 0.0 — sigiloso
+    objeto: >
+      Serviços de atividades relacionadas ao desenvolvimento de software por
+      ponto de função (PF), sob demanda, de acordo com as especificações e
+      detalhamentos consignados nos anexos deste edital.
+    rotulo: relevante
+    por_que: >
+      Desenvolvimento sob demanda, que está em `fornece`. Difícil por acumular
+      três obstáculos: valor sigiloso (0.0), UF fora da faixa, e um objeto que
+      não contém nenhuma das palavras-chave óbvias ("sistema", "gestão", "SaaS").
+      Métrica por ponto de função é o vocabulário real de contratação de fábrica
+      de software no setor público.
+
+  - id: pos-12
+    dificuldade: facil
+    pncp: 83009886000161-1-000031/2026
+    uf: SC
+    valor: 242133.87
+    objeto: >
+      Contratação de empresa especializada para a locação de licença de uso de
+      sistema informatizado, em ambiente web, para gestão pública em saúde,
+      destinado à Secretaria Municipal de Saúde.
+    rotulo: relevante
+    por_que: Locação de licença de sistema web de gestão pública. Dentro da faixa de UF e valor.
+
+  - id: pos-13
+    dificuldade: dificil
+    pncp: 21250048000128-1-000038/2026
+    duplicata_de: 21250048000128-1-000039/2026
+    uf: MG
+    valor: 11600.00
+    objeto: >
+      Contratação de empresa para implantação, disponibilização e licenciamento
+      de sistema informatizado integrado, em modelo SaaS (Software como
+      Serviço), com acesso via WEB Browser, destinado às atividades relativas a
+      obras e serviços de engenharia.
+    rotulo: relevante
+    flag: duplicata
+    por_que: >
+      TESTA DEDUPE. Este edital foi publicado DUAS VEZES no PNCP com sequenciais
+      consecutivos (000038 e 000039), objeto e valor idênticos. Encontrado na
+      amostra de 10.000 registros; o mesmo padrão aparece em
+      76279967000116-1-000040 e -000041, onde a segunda publicação vem prefixada
+      com a plataforma ("[LICITANET] - "). `numeroControlePNCP` NÃO resolve isso:
+      são chaves diferentes para o mesmo edital. Alertar duas vezes o mesmo
+      edital destrói a confiança do usuário mais rápido que um falso positivo.
+      Também é positivo abaixo de R$ 50k, reforçando pos-08.
+
   # ---------- NEGATIVOS DIFÍCEIS: SaaS de TERCEIRO (revenda) ----------
 
   - id: neg-10
@@ -297,6 +417,44 @@ casos:
       rótulo vira `relevante` junto com toda a família — neg-10 (Salesforce),
       neg-11 (produtividade), neg-08 (certificado digital).
 
+  # ---------- NEGATIVOS DA AMOSTRA DE 10.000 (armadilhas novas) ----------
+
+  - id: neg-17
+    dificuldade: dificil
+    pncp: 00394429000100-1-000564/2026
+    uf: BA
+    valor: 313134.00
+    objeto: >
+      Aquisição de reagentes e kits laboratoriais com fornecimento de insumos e
+      equipamentos que serão cedidos em regime de comodato (manutenção e
+      assistência técnica) com integração do software laboratorial junto ao
+      sistema de gestão do hospital.
+    rotulo: nao_relevante
+    por_que: >
+      Contém "software" E "sistema de gestão" numa frase só, e ainda assim o
+      objeto econômico é reagente de laboratório. A integração de software é
+      condição acessória do fornecimento. Variante mais venenosa de neg-13:
+      aqui o software nem é o meio, é um requisito de compatibilidade.
+
+  - id: neg-18
+    dificuldade: dificil
+    pncp: 83021832000111-1-000088/2026
+    uf: SC
+    valor: 3.60   # ATENÇÃO: preço unitário, não total
+    objeto: >
+      Contratação de empresa para prestação de serviços de implantação e
+      operação de um sistema informatizado para administração, gerenciamento,
+      emissão, fornecimento de sistema digital e distribuição para fornecimento
+      de vale uniforme.
+    rotulo: nao_relevante
+    por_que: >
+      "Sistema informatizado" duas vezes, mas o objeto é distribuição de vale
+      uniforme — o software é o meio de operar o benefício.
+      ARMADILHA ADICIONAL DE VALOR: `valorTotalEstimado` veio 3.60, que é a
+      taxa unitária, não o total do contrato. O campo não é só ausente às vezes
+      (0.0) — às vezes está numa unidade diferente. Filtro por faixa de valor
+      não pode ser tratado como confiável em nenhuma direção.
+
   # ---------- LOTE MISTO ----------
 
   - id: pos-06
@@ -335,19 +493,59 @@ casos:
       relevante OU nao_relevante aqui está chutando; a resposta correta é
       "requer documento".
 
-# ---------- O QUE FALTA ----------
+  - id: ind-02
+    dificuldade: dificil
+    pncp: 45374865000156-1-000004/2026
+    uf: SP
+    valor: 203160.00
+    objeto: >
+      O item objeto da aquisição estão dentro da padronização seguida pelo
+      órgão, conforme especificações técnicas e requisitos de desempenho
+      constantes do Catálogo Unificado de Materiais - CATMAT do Sistema
+      Integrado de Administração de Serviços Gerais.
+    rotulo: indeterminado
+    por_que: >
+      O objeto descreve a PROCEDÊNCIA da especificação, não o que está sendo
+      comprado — remete ao CATMAT. Casa com "Sistema Integrado de Administração"
+      por acidente: é o nome do SIASG, o sistema de compras do governo federal,
+      não o que está à venda. Indecidível pelo metadado.
+
+  - id: ind-03
+    dificuldade: dificil
+    pncp: 03296968000790-1-000012/2026
+    uf: DF
+    valor: 92400.00
+    objeto: >
+      Contratação de Sistema de Gestão de Conteúdo em Nuvem, para atender as
+      necessidades do Senac-DF.
+    rotulo: indeterminado
+    por_que: >
+      Doze palavras. É software em nuvem — mas CMS de prateleira de terceiro
+      (revenda, fora do perfil) ou desenvolvimento sob demanda (dentro)? O
+      metadado não distingue, e a diferença decide o rótulo. Caso realista: a
+      maioria dos objetos curtos é assim.
+
+# ---------- ESTADO E LIMITAÇÕES ----------
 #
-# 23 casos: 6 relevantes, 16 não relevantes, 1 indeterminado. Meta da Fase 0: 28-32.
+# 34 casos: 13 relevantes, 18 não relevantes, 3 indeterminados.
+# Meta da Fase 0 (20-30) atingida. Ampliado em 2026-07-21 a partir de uma
+# amostra de 10.000 pregões eletrônicos (abril–julho/2026).
 #
-# O desequilíbrio é o problema real: com 6 positivos, a métrica de recall tem
-# resolução de 1/6 — um único erro derruba 17 pontos. Não dá pra detectar
-# regressão na Fase 1 com esse grão.
+# Cobertura dos filtros estruturais:
+#   - filtro geográfico ....... pos-07 (ES), pos-11 (DF)
+#   - valor abaixo do piso .... pos-08 (R$ 27.780), pos-13 (R$ 11.600)
+#   - valor sigiloso (0.0) .... pos-03, pos-11
+#   - valor em unidade errada . neg-18 (R$ 3,60 = taxa unitária)
+#   - dedupe .................. pos-13
+#   - abstenção ............... ind-01, ind-02, ind-03
+#   - lote misto .............. pos-06
 #
-# Faltam, por ordem de importância:
-#   - Mais POSITIVOS (meta ≥10). Puxar mais dias do PNCP filtrando objetoCompra
-#     por "software de gestão", "SaaS", "sistema de gestão municipal",
-#     "licença de uso de sistema".
-#   - Positivo fora das UFs atendidas (PR/SC/RS/SP) — testa o filtro geográfico.
-#   - Positivo abaixo de R$ 50k — testa o valor_minimo_viavel do perfil.
-#   - Mais 1-2 INDETERMINADOS: a classe nova está com n=1, não mede nada.
-#   - Um caso de edital REPETIDO/republicado (dedupe).
+# Limitações conhecidas, honestas:
+#   - Os casos vieram de uma busca por palavra-chave sobre `objetoCompra`. Um
+#     positivo que não contenha nenhum dos termos buscados é invisível pra este
+#     eval set — o recall real pode ser pior que o medido. Corrigir na Fase 3
+#     amostrando aleatoriamente e rotulando às cegas.
+#   - Rótulos definidos por uma persona de empresa, não por empresa real. A
+#     premissa `revenda_terceiros` do perfil decide 4 casos e não foi validada.
+#   - Janela de abril a julho/2026 apenas. Sazonalidade de licitação não
+#     está representada.

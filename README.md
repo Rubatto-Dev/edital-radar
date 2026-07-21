@@ -84,9 +84,21 @@ retrieval becomes a measured improvement, not a requirement.
 ## Evaluation
 
 The evaluation set (`evals/eval-set.yaml`) was written **before** any pipeline
-code, using real tenders. It is weighted toward hard negatives: cases carrying
-IT vocabulary whose correct label contradicts keyword intuition. A set of
-obvious cases would pass any naive system and measure nothing.
+code, using real tenders drawn from a 10,000-record sample. 34 labeled cases —
+13 relevant, 18 not, 3 undecidable — of which 24 are marked hard.
+
+It is weighted toward hard negatives: cases carrying IT vocabulary whose correct
+label contradicts keyword intuition. A set of obvious cases would pass any naive
+system and measure nothing.
+
+Several positives are there not because they are hard to classify, but because
+each one breaks a cheap filter if that filter is naive — a tender outside the
+served states, one below the viability floor, one whose value is confidential,
+one published twice under different keys.
+
+How badly does keyword matching actually do? A keyword pass over 1,200 real
+records returned 7 candidates, 1 of which was a true positive. **~14% precision**,
+measured on this corpus. That number is the reason this project exists.
 
 Target metrics:
 

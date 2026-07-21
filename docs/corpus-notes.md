@@ -154,6 +154,46 @@ not precision.
 **Chosen niche: IT / software** — the deciding criterion was the ability to
 label the eval set with confidence, not volume.
 
+## Third pass (10,000-record sample, April–July 2026)
+
+Pulled to expand the evaluation set. Four findings, all of which change code.
+
+### `valorTotalEstimado` is not only sometimes absent — sometimes it is a different unit
+
+Already known: `0.0` means unknown. New: a uniform-voucher tender came back with
+`valorTotalEstimado: 3.60` — the per-unit fee, not the contract total. Another
+listed `1.84`. The field cannot be trusted as a total in either direction, so a
+value-range filter is a weak signal, never a hard gate. Captured as `neg-18`.
+
+### The same tender is published more than once, under different keys
+
+`21250048000128-1-000038/2026` and `...-000039/2026` carry identical objects and
+identical values. So do `76279967000116-1-000040` and `-000041`, where the second
+copy is prefixed with the platform name.
+
+`numeroControlePNCP` does **not** solve deduplication — the duplicates have
+distinct keys. Dedupe needs content similarity plus buying-body identity.
+Alerting a user twice for one tender destroys trust faster than a false positive
+does. Captured as `pos-13`.
+
+### Objects carry platform prefixes that are not part of the object
+
+Roughly a fifth of the sampled objects begin with `[Portal de Compras Públicas] - `
+or `[LICITANET] - `. This is publishing-platform metadata leaking into the free
+text. It must be stripped before embedding, or every tender from the same
+platform gains spurious similarity to every other.
+
+### Keyword search has ~14% precision here — measured, not assumed
+
+A first keyword pass over 1,200 records returned 7 candidates, of which **1** was
+a true positive. Two were already labeled negatives in the eval set, and four
+were regex accidents ("manutenção corretiva" matching a pattern written for
+"manutenção evolutiva").
+
+This is the project's central claim, now with a number attached: the incumbent
+approach in this market is keyword alerting, and on this corpus it is wrong
+roughly six times out of seven.
+
 ## Availability
 
 On 2026-07-21 the consultation API returned `500 Erro na comunicação com o banco
