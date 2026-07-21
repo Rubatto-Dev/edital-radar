@@ -43,8 +43,8 @@ Cost is a hard constraint (self-funded). The filter cascade is a requirement,
 not an optimization:
 
 ```
-1. SQL over metadata (state, value, deadline, modality)   free
-2. Vector search: objeto × company profile (local model)  free
+1. SQL: drop expired tenders, attach caveats              free
+2. Vector search: objeto × company profile (local model)  free — cuts the volume
 3. LLM relevance judgment — finalists only                cents/day
 4. Document download + parsing — approved only            rare
 ```
@@ -53,6 +53,32 @@ Key insight from exploration: PNCP metadata includes `objetoCompra`, a
 free-text description of what is being purchased. **Triage runs entirely on
 metadata; documents are fetched only for finalists.** This removes document
 processing from the critical path.
+
+### Layer 1 filters less than it was designed to, on purpose
+
+The original plan had layer 1 cut on state and value, discarding ~95% for
+free. Measuring that against the evaluation set killed it: **8 of 13 relevant
+tenders sit outside the served states** and 2 below the viability floor, so
+hard-filtering both capped recall at **0.385** against a 0.85 target — before
+any matching ran, at the one layer where nothing downstream can recover the
+loss.
+
+So layer 1 splits facts by kind rather than by field:
+
+| Kind | Example | Effect |
+|---|---|---|
+| Hard | The proposal deadline has passed | Dropped — objectively unusable |
+| Soft | Wrong state, below the floor, unknown value | Kept, with a caveat attached |
+
+A tender in a neighbouring state is inconvenient, not impossible — implementing
+SaaS remotely is ordinary. The user decides whether it is worth bidding; the
+filter does not get to decide that silently. Same reasoning as the `lote_misto`
+flag.
+
+The cost model survives because the volume reduction simply moves to layer 2,
+which is also free. Only layer 3 costs money, and layer 2 still runs before it.
+On a live slice, layer 1 keeps 98 of 100 tenders and labels 77 of them with at
+least one caveat.
 
 ### Stack
 
@@ -187,9 +213,12 @@ app/
   db.py                 Connection pool, value normalisation
   pncp.py               API client: retries, and raising instead of returning []
   ingest.py             Incremental idempotent ingestion + CLI
+  perfil.py             Loads the company profile
+  filtros.py            Cascade layer 1: hard deadline cut, soft caveats
 tests/
   test_pncp.py          Client retry and text-cleaning contract
   test_ingest.py        Ingestion outcome contract (ok / parcial / falha)
+  test_filtros.py       Layer 1 must never drop a relevant tender
 sql/
   001_schema.sql        Tables, applied on first container start
 docs/
