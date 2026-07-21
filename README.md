@@ -5,8 +5,8 @@ tenders published to the national procurement portal (PNCP), matches them
 against a company profile, and alerts on relevant opportunities — with the
 citation that justifies the match.
 
-**Status:** Phase 0 (foundation). Evaluation set built before the system,
-deliberately.
+**Status:** Phase 1 — ingestion working against the live API. The evaluation
+set was built before the system, deliberately.
 
 ## The problem
 
@@ -150,12 +150,46 @@ makes a user miss a deadline.
 Ports default to 5440 (Postgres) and 8010 (API) to stay clear of the usual
 local occupants; override in `.env`.
 
+### Ingesting
+
+```sh
+python -m app.ingest --de 20260701 --ate 20260715
+```
+
+Idempotent — re-running a window updates in place and reports `registros_novos: 0`.
+Exits non-zero unless the run was clean, so a cron job that fails is noticed.
+
+Every attempt writes a row to `ingestao_execucao`, and the row is created as
+`falha` *before* the work starts, then promoted on success. A process killed
+mid-run therefore leaves a record that says it failed — which is true.
+Writing `ok` optimistically would leave a crashed run looking successful, and a
+successful-looking run with no tenders is precisely the lie that costs a user a
+deadline.
+
+Three outcomes, deliberately not two:
+
+| Status | Meaning |
+|---|---|
+| `ok` | The window was read completely. Zero tenders is a valid `ok`. |
+| `parcial` | Some pages landed, then the API became unreachable. The corpus has a gap; re-run. |
+| `falha` | Nothing was read. |
+
+On a 200-record slice of the live corpus, **19.5%** of tenders had an unknown
+value (`0.0` normalised to `NULL`) and **28.5%** carried a publishing-platform
+prefix that had to be stripped before the text is usable for matching. Both
+transformations happen on ingest.
+
 ## Repository layout
 
 ```
 app/
   main.py               FastAPI app and healthcheck
   db.py                 Connection pool, value normalisation
+  pncp.py               API client: retries, and raising instead of returning []
+  ingest.py             Incremental idempotent ingestion + CLI
+tests/
+  test_pncp.py          Client retry and text-cleaning contract
+  test_ingest.py        Ingestion outcome contract (ok / parcial / falha)
 sql/
   001_schema.sql        Tables, applied on first container start
 docs/

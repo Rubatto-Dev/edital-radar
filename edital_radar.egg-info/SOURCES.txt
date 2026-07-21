@@ -1,0 +1,14 @@
+LICENSE
+README.md
+pyproject.toml
+app/__init__.py
+app/db.py
+app/ingest.py
+app/main.py
+app/pncp.py
+edital_radar.egg-info/PKG-INFO
+edital_radar.egg-info/SOURCES.txt
+edital_radar.egg-info/dependency_links.txt
+edital_radar.egg-info/requires.txt
+edital_radar.egg-info/top_level.txt
+tests/test_pncp.py
