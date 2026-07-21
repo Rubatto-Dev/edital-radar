@@ -1,0 +1,353 @@
+# Eval set — edital-radar v1
+#
+# Casos REAIS extraídos do PNCP (pregões eletrônicos, 01-15/07/2026).
+# Construído ANTES do sistema, deliberadamente. Este arquivo é o contrato:
+# nenhuma mudança no pipeline entra sem rodar contra ele.
+#
+# rotulo: relevante | nao_relevante | indeterminado
+#   indeterminado = o metadado não basta pra decidir. NÃO é "não sei" preguiçoso:
+#   é uma saída válida do sistema, que dispara o download do anexo (etapa 4 da
+#   cascata). Um sistema que chuta binário aqui está errado mesmo quando acerta.
+#
+# flag: lote_misto  (opcional, só em casos relevantes)
+#   O edital empacota o que a empresa fornece com o que ela não fornece. Alerta
+#   com ressalva em vez de descartar — a assimetria de custo do domínio manda
+#   errar pro lado do alerta.
+#
+# dificuldade: facil | dificil
+#   dificil = tem vocabulário de TI mas o rótulo contrapõe a intuição do keyword.
+#   Um eval set só com "facil" não mede nada — passa em qualquer sistema burro.
+
+meta:
+  perfil: perfil-empresa.yaml
+  fonte: PNCP /contratacoes/publicacao, modalidade 6 (Pregão Eletrônico)
+  periodo: 2026-07-01 a 2026-07-15
+  metrica_alvo:
+    recall_relevantes: 0.85    # não perder edital bom é o que importa
+    precisao: 0.60             # alarme falso custa pouco; oportunidade perdida custa muito
+
+casos:
+
+  # ---------- POSITIVOS ----------
+
+  - id: pos-01
+    dificuldade: facil
+    pncp: 46439683000189-1-000080/2026
+    uf: SP
+    valor: null   # sigiloso — o campo veio 0.0
+    objeto: >
+      CONTRATAÇÃO DE EMPRESA ESPECIALIZADA VISANDO O FORNECIMENTO DE SOLUÇÃO
+      TECNOLÓGICA BASEADA EM AMBIENTE WEB, NO MODELO SOFTWARE COMO SERVIÇO
+      (SAAS), DESTINADA AO APOIO DAS ATIVIDADES DE CONTROLE INTERNO.
+    rotulo: relevante
+    por_que: SaaS puro, gestão pública, sem hardware. É exatamente o produto.
+
+  - id: pos-02
+    dificuldade: facil
+    pncp: 07290290000102-1-000027/2025
+    uf: DF
+    valor: null
+    objeto: >
+      Contratação de solução de tecnologia da informação e comunicação de
+      serviços técnicos especializados de desenvolvimento, manutenção
+      (corretiva, adaptativa e evolutiva), sustentação, testes, DevSecOps,
+      UX/UI e garantia de qualidade.
+    rotulo: relevante
+    por_que: Desenvolvimento e sustentação de software — serviço central da empresa.
+
+  - id: pos-03
+    dificuldade: facil
+    pncp: 82815481000158-1-000058/2026
+    uf: SC
+    valor: null   # veio 0.0 — sigiloso. TESTA o filtro de valor.
+    objeto: >
+      Fornecimento de licença de uso (locação) de sistema web integrado de
+      gestão em nuvem, de uso exclusivo do Fundo Municipal.
+    rotulo: relevante
+    por_que: >
+      O caso canônico: SaaS de gestão municipal. Também é o caso que verifica se
+      o filtro de valor descarta editais com valor sigiloso (0.0).
+
+  - id: pos-04
+    dificuldade: facil
+    pncp: 18715409000150-1-000087/2026
+    uf: MG
+    valor: 1372692.11
+    objeto: >
+      Cessão de direito de uso de software contendo módulo para gestão,
+      monitoramento e auditoria da apuração do Valor Adicionado Fiscal (VAF)
+      e módulo de gestão.
+    rotulo: relevante
+    por_que: Licenciamento de software de gestão tributária municipal. Dentro do perfil.
+
+  - id: pos-05
+    dificuldade: dificil
+    pncp: 50448324000165-1-000010/2026
+    uf: PA
+    valor: 785569.00
+    objeto: >
+      Fornecimento de ferramentas, implantação, manutenção, suporte técnico e
+      atualização contínua de solução integrada de tecnologia da informação.
+    rotulo: relevante
+    por_que: >
+      Implantação + suporte + atualização de solução de TI. "Ferramentas" é
+      ambíguo mas o restante é software. Positivo com menos convicção que os
+      anteriores — bom caso pra medir calibração de confiança.
+
+  # ---------- NEGATIVOS DIFÍCEIS: SaaS de TERCEIRO (revenda) ----------
+
+  - id: neg-10
+    dificuldade: dificil
+    pncp: 35842428000166-1-000007/2026
+    uf: DF
+    valor: 2408159.40
+    objeto: >
+      Fornecimento de licenças de direito de uso de Software como Serviço
+      (SaaS) da Salesforce, para continuidade e expansão dos sistemas de
+      Gestão de Relacionamento com o Cliente.
+    rotulo: nao_relevante
+    por_que: >
+      Diz "SaaS", "licença", "gestão" — casa com TODAS as palavras do perfil.
+      Mas é revenda de produto de terceiro nomeado. O sistema precisa
+      distinguir "software próprio" de "revenda". Caso mais difícil do set.
+
+  - id: neg-11
+    dificuldade: dificil
+    pncp: 90601147000120-1-000021/2026
+    uf: RS
+    valor: 60335.20
+    objeto: >
+      Fornecimento de licenças de subscrição de software para produtividade,
+      colaboração e armazenamento em nuvem (modelo SaaS).
+    rotulo: nao_relevante
+    por_que: >
+      Microsoft 365 / Google Workspace sem dizer o nome. SaaS + licença +
+      nuvem, e ainda assim revenda de terceiro.
+
+  # ---------- NEGATIVO DIFÍCIL: "sistema de gestão" que não é software ----------
+
+  - id: neg-12
+    dificuldade: dificil
+    pncp: 00509018000113-1-001212/2026
+    uf: TO
+    valor: 41783.34
+    objeto: >
+      Contratação de Organismo de Certificação Credenciado para prestação de
+      serviços de auditoria externa para recertificação do sistema de gestão
+      da qualidade (SGQ), conforme Norma NBR ISO.
+    rotulo: nao_relevante
+    por_que: >
+      ARMADILHA NOVA, não prevista na exploração inicial. "Sistema de gestão
+      da qualidade" é ISO 9001 — um processo organizacional auditado, não
+      software. Casa perfeitamente com "sistema de gestão".
+
+  # ---------- NEGATIVOS DIFÍCEIS: software é meio, não o objeto ----------
+
+  - id: neg-13
+    dificuldade: dificil
+    pncp: 00399857000126-1-000151/2026
+    uf: CE
+    valor: 248289.49
+    objeto: >
+      Implantação e operação de sistema informatizado de gerenciamento de
+      frota, por meio de rede credenciada, abrangendo os serviços de
+      abastecimento de combustível.
+    rotulo: nao_relevante
+    por_que: >
+      "Sistema informatizado" existe, mas o objeto econômico é fornecimento de
+      combustível via rede credenciada. O software é meio, não o produto.
+      Distinção que separa um sistema bom de um ingênuo.
+
+  - id: neg-14
+    dificuldade: dificil
+    pncp: 96291141000180-1-003833/2026
+    uf: SP
+    valor: 454575.00
+    objeto: >
+      Gerenciamento de manutenção preventiva e corretiva de veículos
+      automotores oficiais, com fornecimento de peças e intermediação de
+      pagamento em sistema de auto gestão.
+    rotulo: nao_relevante
+    por_que: Manutenção veicular. "Sistema de auto gestão" é modelo de pagamento.
+
+  - id: neg-15
+    dificuldade: dificil
+    pncp: 90601147000120-1-000022/2026
+    uf: RS
+    valor: 312325.20
+    objeto: >
+      Serviços de gestão documental, compreendendo guarda física de acervo em
+      local seguro, transporte especializado, digitalização e indexação.
+    rotulo: nao_relevante
+    por_que: >
+      "Gestão documental" + "digitalização" atraem, mas o objeto é guarda
+      física e logística de papel.
+
+  # ---------- NEGATIVOS DIFÍCEIS: a palavra "sistema" mentindo ----------
+
+  - id: neg-01
+    dificuldade: dificil
+    uf: SP
+    objeto: "Aquisição de medicamentos, através do Sistema de Registro de Preços."
+    rotulo: nao_relevante
+    por_que: >
+      O FALSO POSITIVO #1 DO DOMÍNIO. "Sistema de Registro de Preços" é
+      modalidade de compra, não software. Se o sistema errar este, erra
+      centenas por dia.
+
+  - id: neg-02
+    dificuldade: dificil
+    uf: RN
+    valor: 147200.38
+    objeto: >
+      FORNECIMENTO E INSTALAÇÃO DE SISTEMA DE PROTEÇÃO CONTRA QUEDAS, para
+      segurança de trabalho em altura, abrangendo dispositivos de ancoragem,
+      linha de vidas, Equipamentos de Proteção Individual.
+    rotulo: nao_relevante
+    por_que: '"Sistema" físico. Equipamento de segurança do trabalho.'
+
+  - id: neg-03
+    dificuldade: dificil
+    uf: SP
+    valor: 19159940.88
+    objeto: >
+      Contratação de serviços de Vigilância Armada e Desarmada, a serem
+      executados com regime de dedicação exclusiva de mão de obra.
+    rotulo: nao_relevante
+    por_que: >
+      Meu filtro por keyword classificou isto como "Software". Mão de obra
+      dedicada — explicitamente fora do perfil.
+
+  - id: neg-04
+    dificuldade: dificil
+    uf: RS
+    valor: 23321.45
+    objeto: >
+      Prestação de serviços técnicos de gravação de áudio digital visando à
+      operação do sistema de gravação com particionamento de arquivos.
+    rotulo: nao_relevante
+    por_que: Operação/mão de obra sobre sistema existente, não fornecimento de software.
+
+  # ---------- NEGATIVOS DIFÍCEIS: é TI, mas fora do perfil ----------
+
+  - id: neg-05
+    dificuldade: dificil
+    uf: MG
+    valor: 20054.02
+    objeto: >
+      Fornecimento de 07 (sete) notebooks novos, de primeiro uso, destinados à
+      Câmara Municipal de Carmo da Mata.
+    rotulo: nao_relevante
+    por_que: Hardware puro. Também abaixo do valor mínimo viável.
+
+  - id: neg-06
+    dificuldade: dificil
+    uf: RS
+    valor: 2548747.60
+    objeto: "Registro de preços para aquisição de servidores de rede para o IFRS"
+    rotulo: nao_relevante
+    por_que: Hardware. "Servidor" é a armadilha de vocabulário aqui.
+
+  - id: neg-07
+    dificuldade: dificil
+    uf: DF
+    valor: 649224.00
+    objeto: >
+      Contratação de serviço de Outsourcing de impressão, com fornecimento de
+      equipamentos multifuncionais A4, incluindo instalação, suporte técnico
+      e manutenção.
+    rotulo: nao_relevante
+    por_que: Listado explicitamente em nao_fornece. Tem "suporte técnico" pra confundir.
+
+  - id: neg-08
+    dificuldade: dificil
+    uf: GO
+    valor: 84906.77
+    objeto: >
+      Fornecimento continuado de certificados digitais no padrão ICP-Brasil,
+      e-CPF A3 com token, e-CPF A3 em nuvem, e-CNPJ A1.
+    rotulo: nao_relevante
+    por_que: Tem "nuvem" e é TI, mas é revenda de certificado. Fora do perfil.
+
+  - id: neg-09
+    dificuldade: dificil
+    uf: RJ
+    valor: 2755161.25
+    objeto: >
+      Aquisição de Sistema de Rede de Dados Corporativos Sem Fio (WLAN) com
+      tecnologia Wi-Fi versão 7, incluindo Controle e Gerenciamento de Rede,
+      Pontos de Acesso.
+    rotulo: nao_relevante
+    por_que: Infraestrutura de rede. "Sistema" + "Gerenciamento" atraem falso positivo.
+
+  # ---------- REVENDA DE TERCEIRO (continuação de neg-10/neg-11) ----------
+
+  - id: neg-16
+    dificuldade: dificil
+    uf: RJ
+    valor: 585845.56
+    objeto: >
+      Renovação e aquisição de licença pelo uso do pacote de softwares
+      Solidworks por um período de um ano.
+    rotulo: nao_relevante
+    por_que: >
+      Licenciamento de software — o core — mas de TERCEIRO (CAD). Cai na premissa
+      `revenda_terceiros` do perfil, que diz que a empresa só licencia o produto
+      dela. Premissa NÃO validada com usuário real: se ela cair na Fase 4, este
+      rótulo vira `relevante` junto com toda a família — neg-10 (Salesforce),
+      neg-11 (produtividade), neg-08 (certificado digital).
+
+  # ---------- LOTE MISTO ----------
+
+  - id: pos-06
+    dificuldade: dificil
+    uf: RJ
+    valor: 744000.00
+    objeto: >
+      Fornecimento, implantação, manutenção e suporte técnico de solução
+      integrada de Call Center, serviços de infraestrutura de TI, software de
+      controle e gestão em saúde e rastreamento.
+    rotulo: relevante
+    flag: lote_misto
+    por_que: >
+      Software de gestão empacotado com infraestrutura e call center, que estão
+      em `nao_fornece`. Decisão de produto: alertar COM RESSALVA, não descartar —
+      a assimetria de custo do domínio (recall 0.85 > precisão 0.60) manda errar
+      pro lado do alerta. O sistema deve emitir `flag: lote_misto` para o usuário
+      julgar se vale participar de parte do lote.
+
+  # ---------- INDETERMINADOS ----------
+  # Terceira classe de saída: o sistema não chuta quando sabe que não sabe.
+  # Metadado insuficiente → dispara download do anexo em vez de decidir.
+
+  - id: ind-01
+    dificuldade: facil
+    uf: SP
+    valor: 8955.68
+    objeto: >
+      Aquisição de itens de informática, conforme condições, quantidades e
+      exigências estabelecidas neste Edital e seus anexos.
+    rotulo: indeterminado
+    por_que: >
+      Objeto genérico — o `objetoCompra` não carrega informação suficiente pra
+      decidir, e o próprio texto delega ao anexo. Caso canônico que justifica a
+      etapa 4 da cascata (download do documento). Um sistema que responde
+      relevante OU nao_relevante aqui está chutando; a resposta correta é
+      "requer documento".
+
+# ---------- O QUE FALTA ----------
+#
+# 23 casos: 6 relevantes, 16 não relevantes, 1 indeterminado. Meta da Fase 0: 28-32.
+#
+# O desequilíbrio é o problema real: com 6 positivos, a métrica de recall tem
+# resolução de 1/6 — um único erro derruba 17 pontos. Não dá pra detectar
+# regressão na Fase 1 com esse grão.
+#
+# Faltam, por ordem de importância:
+#   - Mais POSITIVOS (meta ≥10). Puxar mais dias do PNCP filtrando objetoCompra
+#     por "software de gestão", "SaaS", "sistema de gestão municipal",
+#     "licença de uso de sistema".
+#   - Positivo fora das UFs atendidas (PR/SC/RS/SP) — testa o filtro geográfico.
+#   - Positivo abaixo de R$ 50k — testa o valor_minimo_viavel do perfil.
+#   - Mais 1-2 INDETERMINADOS: a classe nova está com n=1, não mede nada.
+#   - Um caso de edital REPETIDO/republicado (dedupe).

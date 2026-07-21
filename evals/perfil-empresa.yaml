@@ -1,0 +1,88 @@
+# Perfil da empresa-alvo do edital-radar (v1)
+#
+# Este perfil define o que conta como "relevante". Ele é a entrada do matching
+# semântico e o contrato do eval set — mudar o perfil invalida os rótulos.
+
+nome: Fábrica de software de gestão pública
+descricao_curta: >
+  Desenvolve e licencia sistema próprio de gestão para prefeituras e câmaras
+  municipais (modelo SaaS/ERP), com implantação, migração de dados, treinamento
+  e suporte continuado.
+
+fornece:
+  - Licenciamento de software próprio de gestão (SaaS ou on-premise)
+  - Desenvolvimento e customização de sistemas sob demanda
+  - Implantação, migração de dados e treinamento de usuários
+  - Suporte técnico e sustentação de software
+  - Manutenção evolutiva, corretiva e adaptativa
+
+nao_fornece:
+  - Hardware de qualquer tipo (notebooks, servidores físicos, impressoras)
+  - Cabeamento, rede física, infraestrutura de datacenter
+  - Links de internet, telecomunicações, telefonia
+  - Serviços com dedicação exclusiva de mão de obra
+  - Outsourcing de impressão
+  - Software de terceiros revendido (CAD, pacote Office, antivírus)
+  - Certificados digitais
+
+restricoes_operacionais:
+  ufs_atendidas: [PR, SC, RS, SP]   # ajustar conforme a realidade
+  valor_minimo_viavel: 50000        # abaixo disso não compensa o custo de participar
+  valor_maximo_viavel: 5000000      # acima disso exige atestado/capital que a empresa não tem
+
+  # A faixa acima só se aplica a valor CONHECIDO. O PNCP devolve
+  # valorTotalEstimado: 0.0 quando o valor é sigiloso ou não informado — nunca
+  # null. Um filtro ingênuo por faixa descarta esses editais silenciosamente,
+  # inclusive bons (ver pos-03, que é exatamente esse caso).
+  valor_zero_significa: desconhecido
+  valor_desconhecido_passa_filtro: true
+
+# Premissas sobre a empresa que ainda NÃO foram validadas com usuário real.
+# Estão aqui explícitas em vez de implícitas no rótulo: cada uma decide uma
+# família inteira de editais, e derrubar uma invalida rótulos em bloco.
+# Revisar na Fase 4, quando houver empresa de verdade usando.
+premissas:
+  - id: revenda_terceiros
+    afirma: A empresa NÃO revende licença de software de terceiros.
+    status: nao_validada
+    decidido_em: 2026-07-21
+    rotulos_dependentes: [neg-08, neg-10, neg-11, neg-16]
+    se_cair: >
+      Remover "Software de terceiros revendido" de nao_fornece e reetiquetar os
+      quatro casos como relevante. Alarga bastante o escopo do produto.
+
+# Armadilhas conhecidas deste domínio — casos que parecem relevantes e não são.
+# Descobertas na exploração real do PNCP (ver FASE0-ACHADOS-PNCP.md).
+armadilhas:
+  - termo: "Sistema de Registro de Preços"
+    por_que: >
+      Termo jurídico-administrativo (SRP) presente em praticamente toda
+      licitação, de medicamentos a concreto. Não indica software.
+      É o falso positivo #1 do domínio.
+  - termo: "sistema de ..."
+    por_que: >
+      "sistema de proteção contra quedas", "sistema de exaustão", "sistema de
+      abastecimento de água", "sistema de vigilância" — todos são
+      equipamento físico, não software.
+  - termo: "hospedagem"
+    por_que: >
+      Frequentemente hospedagem hoteleira ("agenciamento de hospedagem,
+      reserva, marcação, remarcação"), não hospedagem de servidor.
+  - termo: "solução integrada"
+    por_que: >
+      Pode incluir grande componente de hardware ou mão de obra dedicada,
+      tornando o lote inviável mesmo com software na descrição.
+  - termo: "sistema de gestão da qualidade"
+    por_que: >
+      ISO 9001 — processo organizacional auditado por certificadora, não
+      software. Casa perfeitamente com "sistema de gestão".
+  - termo: "SaaS de terceiro"
+    por_que: >
+      "Licenças de SaaS da Salesforce", "licenças de subscrição para
+      produtividade e colaboração" (M365/Workspace). Casam com SaaS +
+      licença + nuvem + gestão, mas são revenda de produto de terceiro.
+  - termo: "software como meio, não como objeto"
+    por_que: >
+      "sistema informatizado de gerenciamento de frota abrangendo
+      abastecimento de combustível" — o objeto econômico é combustível.
+      Distinguir o produto vendido do software que o operacionaliza.

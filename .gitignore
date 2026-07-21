@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# dados brutos do PNCP — reproduzíveis via ingestor, não versionar
+data/raw/
+*.json.gz
+
+.pytest_cache/
+.ruff_cache/
+.vscode/
+.idea/
