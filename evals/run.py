@@ -45,6 +45,12 @@ RESSALVAS_DE_METODO = [
 
     "Corrigir ambos na Fase 3: amostra aleatoria do corpus, rotulada as "
     "cegas, pra estimar taxa-base e recall sem o vies da coleta.",
+
+    "O limiar do classificador vetorial (0.45) foi escolhido olhando ESTE "
+    "set. Isso e ajuste no proprio conjunto de avaliacao: o numero dele e "
+    "otimista, e num set novo tende a ser pior. Com 34 casos nao da pra "
+    "separar treino de teste sem inutilizar os dois — assumido, nao "
+    "escondido.",
 ]
 
 
@@ -135,6 +141,7 @@ def main():
     disponiveis = {
         "alerta_tudo": classificadores.alerta_tudo,
         "keyword": classificadores.keyword,
+        "vetorial": classificadores.vetorial,
     }
 
     p = argparse.ArgumentParser()

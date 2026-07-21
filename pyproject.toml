@@ -12,6 +12,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.3"]
+# Kept out of the default install: torch adds ~2GB, and the API container
+# does not need it. Ingestion and evaluation run from the host venv.
+embeddings = ["sentence-transformers>=3.0"]
 
 [tool.setuptools]
 packages = ["app", "evals"]

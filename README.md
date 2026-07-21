@@ -141,10 +141,20 @@ with it, so every later number has something to be a delta from:
 |---|---|---|---|
 | Alert on everything | 1.000 | 0.382 | no |
 | Keyword match (the incumbent) | 1.000 | 0.448 | no |
+| Vector similarity (layer 2) | 1.000 | 0.542 | no |
 
-Neither passes, which is the point: the floor is established before the
+None passes, which is the point: the floor is established before the
 interesting work starts. If a baseline ever passed, the target would be too
-easy or the set too kind.
+easy or the set too kind. Layer 3 is what has to close the gap.
+
+Layer 2 is tuned as a **funnel, not a decision boundary**. At the threshold in
+use it keeps every relevant case in the set while discarding **69% of the live
+corpus** — medicine scores 0.10 against the profile, infant formula 0.036.
+
+It does not solve the headline trap on its own. Three of the five
+highest-scoring live tenders still contain "Sistema de Registro de Preços":
+embeddings kill the easy keyword failures and leave the hard ones, which is
+precisely the work left for the LLM.
 
 ### Two numbers that look contradictory and are not
 
@@ -205,6 +215,16 @@ makes a user miss a deadline.
 Ports default to 5440 (Postgres) and 8010 (API) to stay clear of the usual
 local occupants; override in `.env`.
 
+### Embeddings
+
+The embedding model is an optional extra, so the default install and the API
+image stay lean (torch adds ~2GB):
+
+```sh
+uv pip install -e ".[embeddings]"
+python -m app.indexar
+```
+
 ### Ingesting
 
 ```sh
@@ -244,11 +264,14 @@ app/
   ingest.py             Incremental idempotent ingestion + CLI
   perfil.py             Loads the company profile
   filtros.py            Cascade layer 1: hard deadline cut, soft caveats
+  embeddings.py         Cascade layer 2: local model, profile vs tender
+  indexar.py            Backfills pgvector embeddings, idempotent
 tests/
   test_pncp.py          Client retry and text-cleaning contract
   test_ingest.py        Ingestion outcome contract (ok / parcial / falha)
   test_filtros.py       Layer 1 must never drop a relevant tender
   test_eval_runner.py   Scoring rules, and that no baseline passes
+  test_embeddings.py    The claim: separating what keyword cannot
 sql/
   001_schema.sql        Tables, applied on first container start
 docs/
