@@ -142,7 +142,12 @@ def main():
         "alerta_tudo": classificadores.alerta_tudo,
         "keyword": classificadores.keyword,
         "vetorial": classificadores.vetorial,
+        "llm": classificadores.llm,
+        "cascata": classificadores.cascata,
     }
+    # Only these run by default. `llm`/`cascata` hit the real, paid API —
+    # they require an explicit `--classificador`, never by omission.
+    GRATUITOS = ["alerta_tudo", "keyword", "vetorial"]
 
     p = argparse.ArgumentParser()
     p.add_argument("--classificador", choices=list(disponiveis), action="append")
@@ -150,7 +155,7 @@ def main():
     args = p.parse_args()
 
     casos, perfil = carregar()
-    escolhidos = args.classificador or list(disponiveis)
+    escolhidos = args.classificador or GRATUITOS
     resultados = {n: avaliar(disponiveis[n], casos, perfil) for n in escolhidos}
 
     if args.json:
