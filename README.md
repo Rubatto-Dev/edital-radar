@@ -166,16 +166,32 @@ with it, so every later number has something to be a delta from:
 | Alert on everything | 1.000 | 0.382 | no |
 | Keyword match (the incumbent) | 1.000 | 0.448 | no |
 | Vector similarity (layer 2) | 1.000 | 0.542 | no |
+| **Cascade, layer 3 = Haiku 4.5** (`cascata`) | 0.692 | 0.900–1.000 | no |
+| **Cascade, layer 3 = Sonnet 5** (`cascata_sonnet`) | 0.846 | 1.000 | no — 1 case short of 0.85 |
 
-None passes, which is the point: the floor is established before the
-interesting work starts. If a baseline ever passed, the target would be too
-easy or the set too kind. Layer 3 is what has to close the gap.
+Measured 2026-07-27 against the live API, 24 layer-3 calls per run
+(~$0.03–$0.06). None passes, which is the point: the floor is established
+before the interesting work starts. If a baseline ever passed, the target
+would be too easy or the set too kind.
 
-**Layer 3 (`llm`) and the full cascade (`cascata`) are implemented but not
-yet measured here** — no `ANTHROPIC_API_KEY` is configured on the machine
-these numbers were last run from. Run `python -m evals.run --classificador
-cascata` with a key set to get real recall/precision, and update this table —
-don't claim a number that wasn't actually measured.
+Layer 3 flips the failure mode from layer 2's: precision jumps to
+0.90–1.00 (the LLM correctly clears the false positives layer 2's funnel
+still let through), but recall drops below the baselines' 1.000 — the LLM
+is more conservative than "alert on everything" on genuinely ambiguous
+cases (a fiscal-audit software module, an environmental-management SaaS, a
+mixed lot bundling call-center infra with health software). **Recall,
+weighted higher in this domain, is worse on both models than the naive
+baselines.** Swapping Haiku for Sonnet 5 — same prompt, same schema, only
+the model ID changed — recovers 2 of the 4 misses (recall 0.692 → 0.846),
+which is the A/B the roadmap called for if Haiku underperforms.
+
+Neither model was pushed further: with only 13 relevant cases in the set,
+recall moves in steps of 1/13 ≈ 0.077, so clearing 0.85 requires 12/13
+exactly — and re-running or re-prompting until one more case flips is
+tuning against the same 34 cases the layer-2 threshold was already tuned
+on, a bias the runner's own method caveats call out below. The honest fix
+is Phase 3's blind random sample against the live corpus, not another pass
+over this set.
 
 Layer 2 is tuned as a **funnel, not a decision boundary**. At the threshold in
 use it keeps every relevant case in the set while discarding **69% of the live

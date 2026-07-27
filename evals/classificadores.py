@@ -69,11 +69,34 @@ def vetorial(caso, perfil, limiar=LIMIAR_FUNIL):
     return "relevante" if similaridade(p, o) >= limiar else "nao_relevante"
 
 
+@functools.lru_cache(maxsize=1)
+def _orcamento():
+    from app.custo import Orcamento
+
+    return Orcamento()
+
+
 def llm(caso, perfil):
-    """Layer 3: LLM relevance judgment. Costs money — calls the real API."""
+    """Layer 3: LLM relevance judgment. Costs money — calls the real API.
+
+    Goes through the shared daily Orcamento so this classifier can never
+    bypass the spend cap that app/custo.py exists to enforce, and so every
+    call lands in the cost/latency ledger regardless of caller.
+    """
     from app.llm import julgar
 
-    return julgar(caso["objeto"], perfil).classe
+    return julgar(caso["objeto"], perfil, orcamento=_orcamento()).classe
+
+
+def llm_sonnet(caso, perfil):
+    """Layer 3 with Sonnet 5 instead of Haiku 4.5 — the A/B the issue asked
+    for if Haiku underperforms on recall: same prompt and schema, priced and
+    logged the same way, so the delta is comparable and not a guess."""
+    from app.llm import julgar
+
+    return julgar(
+        caso["objeto"], perfil, modelo="claude-sonnet-5", orcamento=_orcamento()
+    ).classe
 
 
 def cascata(caso, perfil, limiar=LIMIAR_FUNIL):
@@ -86,3 +109,9 @@ def cascata(caso, perfil, limiar=LIMIAR_FUNIL):
     if vetorial(caso, perfil, limiar) == "nao_relevante":
         return "nao_relevante"
     return llm(caso, perfil)
+
+
+def cascata_sonnet(caso, perfil, limiar=LIMIAR_FUNIL):
+    if vetorial(caso, perfil, limiar) == "nao_relevante":
+        return "nao_relevante"
+    return llm_sonnet(caso, perfil)

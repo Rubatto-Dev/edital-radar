@@ -16,12 +16,13 @@ from app.perfil import carregar
 
 MODELO = "claude-haiku-4-5"
 
-# Haiku 4.5 pricing, USD per token. Cache read ~0.1x input, cache write
-# (default 5-minute ephemeral TTL) ~1.25x input.
-PRECO_INPUT = 1.0 / 1_000_000
-PRECO_OUTPUT = 5.0 / 1_000_000
-PRECO_CACHE_READ = 0.1 / 1_000_000
-PRECO_CACHE_WRITE = 1.25 / 1_000_000
+# USD per 1M tokens, input/output. Cache read is ~0.1x input, cache write
+# (default 5-minute ephemeral TTL) ~1.25x input — same ratio on every model.
+# Sonnet 5 price is the introductory rate through 2026-08-31.
+PRECOS = {
+    "claude-haiku-4-5": {"input": 1.0, "output": 5.0},
+    "claude-sonnet-5": {"input": 2.0, "output": 10.0},
+}
 
 CLASSES = ("relevante", "nao_relevante", "indeterminado")
 
@@ -80,12 +81,15 @@ def system_prompt(perfil: dict) -> list[dict]:
     return [{"type": "text", "text": texto, "cache_control": {"type": "ephemeral"}}]
 
 
-def custo(usage) -> float:
+def custo(usage, modelo: str = MODELO) -> float:
+    preco = PRECOS[modelo]
+    preco_input = preco["input"] / 1_000_000
+    preco_output = preco["output"] / 1_000_000
     return (
-        usage.input_tokens * PRECO_INPUT
-        + usage.output_tokens * PRECO_OUTPUT
-        + getattr(usage, "cache_read_input_tokens", 0) * PRECO_CACHE_READ
-        + getattr(usage, "cache_creation_input_tokens", 0) * PRECO_CACHE_WRITE
+        usage.input_tokens * preco_input
+        + usage.output_tokens * preco_output
+        + getattr(usage, "cache_read_input_tokens", 0) * preco_input * 0.1
+        + getattr(usage, "cache_creation_input_tokens", 0) * preco_input * 1.25
     )
 
 
@@ -93,6 +97,7 @@ def julgar(
     objeto: str,
     perfil: dict | None = None,
     *,
+    modelo: str = MODELO,
     client=None,
     orcamento=None,
 ) -> Julgamento:
@@ -104,7 +109,7 @@ def julgar(
 
     inicio = time.monotonic()
     resposta = client.messages.create(
-        model=MODELO,
+        model=modelo,
         max_tokens=512,
         system=system_prompt(perfil),
         output_config={"format": {"type": "json_schema", "schema": SCHEMA}},
@@ -114,7 +119,7 @@ def julgar(
 
     texto = next(b.text for b in resposta.content if b.type == "text")
     dados = json.loads(texto)
-    custo_usd = custo(resposta.usage)
+    custo_usd = custo(resposta.usage, modelo)
 
     julgamento = Julgamento(
         classe=dados["classe"],

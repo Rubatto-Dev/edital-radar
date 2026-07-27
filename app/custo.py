@@ -11,7 +11,7 @@ import datetime
 import json
 from pathlib import Path
 
-TETO_PADRAO_USD = 1.0
+TETO_PADRAO_USD = 0.40
 CAMINHO_PADRAO = Path(__file__).resolve().parent.parent / "data" / "custo-ledger.jsonl"
 
 

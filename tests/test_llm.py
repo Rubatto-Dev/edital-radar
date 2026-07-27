@@ -84,6 +84,25 @@ def test_julgar_usa_o_modelo_haiku_e_saida_estruturada():
     )
 
 
+def test_julgar_aceita_outro_modelo_para_ab_test():
+    # The issue's own acceptance criterion: if Haiku underperforms on
+    # recall, compare against Sonnet with the same prompt and schema.
+    resposta = _resposta('{"classe": "relevante", "justificativa": "x", "lote_misto": false}')
+    cliente = ClienteFalso(resposta)
+
+    julgamento = julgar("objeto", PERFIL, modelo="claude-sonnet-5", client=cliente)
+
+    assert cliente.chamadas[0]["model"] == "claude-sonnet-5"
+    assert julgamento.custo_usd > 0
+
+
+def test_custo_usa_a_tabela_de_preco_do_modelo():
+    resposta = _resposta("{}", input_tokens=1000, output_tokens=1000)
+    custo_haiku = custo(resposta.usage, modelo="claude-haiku-4-5")
+    custo_sonnet = custo(resposta.usage, modelo="claude-sonnet-5")
+    assert custo_sonnet > custo_haiku  # Sonnet custa mais por token
+
+
 def test_custo_soma_input_output_e_cache():
     resposta = _resposta(
         '{"classe": "relevante", "justificativa": "x", "lote_misto": false}',

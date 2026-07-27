@@ -144,8 +144,10 @@ def main():
         "vetorial": classificadores.vetorial,
         "llm": classificadores.llm,
         "cascata": classificadores.cascata,
+        "llm_sonnet": classificadores.llm_sonnet,
+        "cascata_sonnet": classificadores.cascata_sonnet,
     }
-    # Only these run by default. `llm`/`cascata` hit the real, paid API —
+    # Only these run by default. Everything else hits the real, paid API —
     # they require an explicit `--classificador`, never by omission.
     GRATUITOS = ["alerta_tudo", "keyword", "vetorial"]
 
