@@ -1,8 +1,11 @@
+import datetime
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
+from app.consulta import buscar
 from app.db import pool
+from app.embeddings import embedar
 
 
 @asynccontextmanager
@@ -37,3 +40,16 @@ def health():
             {"status": ultima[0], "em": ultima[1].isoformat()} if ultima else None
         ),
     }
+
+
+@app.get("/query")
+def query(q: str, limite: int = 5):
+    if not q.strip():
+        raise HTTPException(status_code=422, detail="q não pode ser vazio")
+
+    vetor = embedar([q])[0]
+    agora = datetime.datetime.now(datetime.timezone.utc)
+    with pool.connection() as conn:
+        resultados = buscar(conn, vetor, agora, limite)
+
+    return {"pergunta": q, "resultados": resultados}

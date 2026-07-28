@@ -261,10 +261,48 @@ makes a user miss a deadline.
 Ports default to 5440 (Postgres) and 8010 (API) to stay clear of the usual
 local occupants; override in `.env`.
 
+### Querying the corpus
+
+```sh
+curl "localhost:8010/query?q=sistema+de+gestao+para+prefeitura"
+```
+
+```json
+{
+  "pergunta": "sistema de gestao para prefeitura",
+  "resultados": [
+    {
+      "numero_controle_pncp": "07753868000101-1-000003/2026",
+      "trecho": "Locação de sistema informatizado de gestão municipal, incluindo módulos de tributos, folha de pagamento e protocolo, com implantação, treinamento e suporte técnico.",
+      "link": "https://pncp.gov.br/app/editais/07753868000101/2026/3",
+      "orgao": "Prefeitura Municipal de Exemplo",
+      "uf": "SC",
+      "valor_total_estimado": 350000,
+      "prazo": null,
+      "similaridade": 0.561
+    }
+  ]
+}
+```
+
+`trecho` is the tender's own object text, verbatim — not a summary an LLM
+could get wrong — and `link` is PNCP's public viewer for that exact tender.
+Without both, a result does not count as an answer: the user has to be able
+to check it, not trust it. No LLM runs here and it costs nothing; it is
+layer 2's vector search (`app/consulta.py`) against whatever is already
+indexed, ordered by cosine similarity to the free-text question.
+
+The example above ran against three seeded rows built from real PNCP tender
+IDs, not a live query — a useful smoke test, not a claim about corpus size.
+Ingest real data first (below) for it to answer against anything current.
+
 ### Embeddings
 
-The embedding model is an optional extra, so the default install and the API
-image stay lean (torch adds ~2GB):
+The embedding model used to be an optional extra kept out of the API image
+to save ~2GB. From Phase 1.7 on it ships in the image by default — `/query`
+has to embed the user's question at request time, so the container needs
+the model, not just the CLI. Still optional for a host venv that only runs
+the ingester:
 
 ```sh
 uv pip install -e ".[embeddings]"
@@ -314,6 +352,7 @@ app/
   indexar.py            Backfills pgvector embeddings, idempotent
   llm.py                Cascade layer 3: LLM relevance judgment, structured output
   custo.py              Daily spend cap for layer 3, append-only cost/latency ledger
+  consulta.py           /query: free-text search over the indexed corpus, PNCP link
 tests/
   test_pncp.py          Client retry and text-cleaning contract
   test_ingest.py        Ingestion outcome contract (ok / parcial / falha)
@@ -322,6 +361,8 @@ tests/
   test_embeddings.py    The claim: separating what keyword cannot
   test_llm.py           Layer 3 parsing and cost accounting, no network
   test_custo.py         Spend cap actually caps, only on today's spend
+  test_classificadores.py  llm classifier must never bypass the spend cap
+  test_consulta.py      Every result carries a citation and a real PNCP link
 sql/
   001_schema.sql        Tables, applied on first container start
 docs/
