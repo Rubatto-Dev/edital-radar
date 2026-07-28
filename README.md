@@ -5,8 +5,9 @@ tenders published to the national procurement portal (PNCP), matches them
 against a company profile, and alerts on relevant opportunities — with the
 citation that justifies the match.
 
-**Status:** Phase 1 — ingestion working against the live API. The evaluation
-set was built before the system, deliberately.
+**Status:** Phase 1 — ingestion working against the live API; all three
+cascade layers are implemented. The evaluation set was built before the
+system, deliberately.
 
 ## The problem
 
@@ -80,6 +81,29 @@ which is also free. Only layer 3 costs money, and layer 2 still runs before it.
 On a live slice, layer 1 keeps 98 of 100 tenders and labels 77 of them with at
 least one caveat.
 
+### Layer 3: the only step that costs money
+
+Layer 2 is a funnel, not a decision boundary — it still lets through tenders
+that share vocabulary with the profile without matching it, including the
+`Sistema de Registro de Preços` trap layer 2 doesn't fully close (see above).
+Layer 3 judges only those finalists with Claude Haiku 4.5, using structured
+output (`output_config.format`, a JSON schema) so the three-class contract —
+`relevante` / `nao_relevante` / `indeterminado` — is guaranteed by the API,
+not by parsing a string. `nao_fornece` is part of the system prompt here,
+unlike layer 2's profile vector (`app/embeddings.py:texto_do_perfil`): an LLM
+can reason about negation, an averaged vector can't. The system prompt is
+built deterministically from the profile so its bytes are stable across
+calls — a precondition for `cache_control` to ever hit, though at this
+profile's current size the prompt likely sits below Haiku 4.5's ~4096-token
+minimum cacheable prefix, so the cache may not actually engage yet; that's
+measured, not assumed.
+
+A hard daily spend cap (`app/custo.py`) gates every call: exceeded → the
+caller stops and is notified, rather than silently spending past what a
+self-funded intern can absorb. Every attempt — cost and latency — is written
+to an append-only ledger, which doubles as the record Phase 3 (observability)
+will consume, so the eval loop stays decoupled from Postgres.
+
 ### Stack
 
 - FastAPI + PostgreSQL/pgvector + Docker
@@ -142,10 +166,32 @@ with it, so every later number has something to be a delta from:
 | Alert on everything | 1.000 | 0.382 | no |
 | Keyword match (the incumbent) | 1.000 | 0.448 | no |
 | Vector similarity (layer 2) | 1.000 | 0.542 | no |
+| **Cascade, layer 3 = Haiku 4.5** (`cascata`) | 0.692 | 0.900–1.000 | no |
+| **Cascade, layer 3 = Sonnet 5** (`cascata_sonnet`) | 0.846 | 1.000 | no — 1 case short of 0.85 |
 
-None passes, which is the point: the floor is established before the
-interesting work starts. If a baseline ever passed, the target would be too
-easy or the set too kind. Layer 3 is what has to close the gap.
+Measured 2026-07-27 against the live API, 24 layer-3 calls per run
+(~$0.03–$0.06). None passes, which is the point: the floor is established
+before the interesting work starts. If a baseline ever passed, the target
+would be too easy or the set too kind.
+
+Layer 3 flips the failure mode from layer 2's: precision jumps to
+0.90–1.00 (the LLM correctly clears the false positives layer 2's funnel
+still let through), but recall drops below the baselines' 1.000 — the LLM
+is more conservative than "alert on everything" on genuinely ambiguous
+cases (a fiscal-audit software module, an environmental-management SaaS, a
+mixed lot bundling call-center infra with health software). **Recall,
+weighted higher in this domain, is worse on both models than the naive
+baselines.** Swapping Haiku for Sonnet 5 — same prompt, same schema, only
+the model ID changed — recovers 2 of the 4 misses (recall 0.692 → 0.846),
+which is the A/B the roadmap called for if Haiku underperforms.
+
+Neither model was pushed further: with only 13 relevant cases in the set,
+recall moves in steps of 1/13 ≈ 0.077, so clearing 0.85 requires 12/13
+exactly — and re-running or re-prompting until one more case flips is
+tuning against the same 34 cases the layer-2 threshold was already tuned
+on, a bias the runner's own method caveats call out below. The honest fix
+is Phase 3's blind random sample against the live corpus, not another pass
+over this set.
 
 Layer 2 is tuned as a **funnel, not a decision boundary**. At the threshold in
 use it keeps every relevant case in the set while discarding **69% of the live
@@ -266,12 +312,16 @@ app/
   filtros.py            Cascade layer 1: hard deadline cut, soft caveats
   embeddings.py         Cascade layer 2: local model, profile vs tender
   indexar.py            Backfills pgvector embeddings, idempotent
+  llm.py                Cascade layer 3: LLM relevance judgment, structured output
+  custo.py              Daily spend cap for layer 3, append-only cost/latency ledger
 tests/
   test_pncp.py          Client retry and text-cleaning contract
   test_ingest.py        Ingestion outcome contract (ok / parcial / falha)
   test_filtros.py       Layer 1 must never drop a relevant tender
   test_eval_runner.py   Scoring rules, and that no baseline passes
   test_embeddings.py    The claim: separating what keyword cannot
+  test_llm.py           Layer 3 parsing and cost accounting, no network
+  test_custo.py         Spend cap actually caps, only on today's spend
 sql/
   001_schema.sql        Tables, applied on first container start
 docs/

@@ -10,6 +10,9 @@ venv/
 data/raw/
 *.json.gz
 
+# ledger de custo da camada 3 (LLM) — runtime, não fixture
+data/custo-ledger.jsonl
+
 .pytest_cache/
 .ruff_cache/
 .vscode/
