@@ -15,14 +15,28 @@ makes the tool logic testable without going through the real Tool Runner.
 """
 
 import dataclasses
+import datetime
 import functools
 import json
+import logging
 import time
 
-from app.custo import Orcamento
+import httpx
+
+from app.consulta import NUMERO_CONTROLE_RE
+from app.custo import Orcamento, TetoEstourado
+from app.db import pool
+from app.embeddings import LIMIAR_FUNIL, embedar, similaridade, texto_do_perfil
 from app.ferramentas import baixar_anexo, buscar_no_corpus, calcular_prazo, listar_anexos
+from app.filtros import candidatos
+from app.indexar import indexar
+from app.ingest import ingerir
 from app.llm import MODELO, custo as custo_llm, system_prompt as system_prompt_base
+from app.notificacao import notificar_se_relevante
 from app.perfil import carregar
+from app.pncp import PncpIndisponivel
+
+log = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
@@ -98,11 +112,18 @@ def construir_ferramentas(edital: dict, conn):
         if not (cnpj and ano and sequencial):
             return json.dumps({"erro": "sem cnpj/ano/sequencial pra localizar anexos"})
 
-        anexos = listar_anexos(cnpj, ano, sequencial)
-        if not anexos:
-            return json.dumps({"erro": "nenhum anexo disponível"})
+        # A real failure here (unreachable PNCP, corrupted download) must not
+        # crash the loop — it becomes something Claude can reason about
+        # (e.g. fall back to indeterminado) instead of an unhandled 500 that
+        # takes the whole daily run down with it.
+        try:
+            anexos = listar_anexos(cnpj, ano, sequencial)
+            if not anexos:
+                return json.dumps({"erro": "nenhum anexo disponível"})
+            info = baixar_anexo(anexos[0]["url"])
+        except httpx.HTTPError as e:
+            return json.dumps({"erro": f"falha ao baixar anexo: {e}"})
 
-        info = baixar_anexo(anexos[0]["url"])
         return json.dumps(
             {
                 "titulo": anexos[0]["titulo"],
@@ -230,3 +251,194 @@ def registrar_log(conn, numero_controle_pncp: str, decisao: DecisaoAgente) -> in
         ),
     ).fetchone()
     return linha[0]
+
+
+# ---------------------------------------------------------------------------
+# Daily driver: python -m app.agente --de --ate
+# ---------------------------------------------------------------------------
+
+
+def ja_julgados(conn) -> set:
+    """Tenders that already have a decision on record — skipped so a
+    re-run doesn't re-spend on the same candidate."""
+    linhas = conn.execute("SELECT DISTINCT numero_controle_pncp FROM decisao_agente").fetchall()
+    return {l[0] for l in linhas}
+
+
+def _para_edital(candidato: dict) -> dict:
+    """Reshapes a layer-1 candidate row (app.filtros.candidatos) into the
+    edital shape julgar_com_agente expects. cnpj/ano/sequencial are not
+    stored columns — numeroControlePNCP already encodes them (see
+    docs/corpus-notes.md), so they are parsed from it rather than adding a
+    schema change just to carry three integers."""
+    edital = {
+        "numero_controle_pncp": candidato["numero_controle_pncp"],
+        "objeto": candidato["objeto_limpo"] or candidato["objeto_compra"],
+        "orgao": candidato["orgao_razao_social"],
+        "uf": candidato["uf_sigla"],
+        "valor_total_estimado": candidato["valor_total_estimado"],
+        "data_encerramento_proposta": candidato["data_encerramento_proposta"],
+    }
+    m = NUMERO_CONTROLE_RE.match(candidato["numero_controle_pncp"])
+    if m:
+        edital["cnpj"] = m["cnpj"]
+        edital["ano_compra"] = int(m["ano"])
+        edital["sequencial_compra"] = int(m["sequencial"])
+    return edital
+
+
+def selecionar_finalistas(conn, perfil: dict, limiar: float = LIMIAR_FUNIL) -> list[dict]:
+    """Layer 1 (structured filter, never drops — only caveats) then layer 2
+    (funnel) on top of whatever the agent has not already judged."""
+    candidatos_l1 = candidatos(conn, datetime.datetime.now(datetime.timezone.utc), perfil)
+    julgados = ja_julgados(conn)
+    candidatos_l1 = [c for c in candidatos_l1 if c["numero_controle_pncp"] not in julgados]
+    if not candidatos_l1:
+        return []
+
+    vetor_perfil = embedar([texto_do_perfil(perfil)])[0]
+    objetos = [c["objeto_limpo"] or c["objeto_compra"] for c in candidatos_l1]
+    vetores = embedar(objetos)
+
+    return [
+        c
+        for c, v in zip(candidatos_l1, vetores)
+        if similaridade(vetor_perfil, v) >= limiar
+    ]
+
+
+INICIAR_EXECUCAO_SQL = """
+INSERT INTO agente_execucao (data_inicial, data_final, status)
+VALUES (%s, %s, 'falha') RETURNING id
+"""
+
+FINALIZAR_EXECUCAO_SQL = """
+UPDATE agente_execucao
+   SET status = %s, candidatos_avaliados = %s, decisoes_relevantes = %s,
+       erro = %s, terminado_em = now()
+ WHERE id = %s
+"""
+
+
+def executar_janela(
+    data_inicial: str,
+    data_final: str,
+    perfil: dict | None = None,
+    modelo: str = MODELO,
+    teto_usd: float | None = None,
+    limite_finalistas: int | None = None,
+) -> dict:
+    """The daily run: ingest the window, backfill embeddings, judge every
+    layer-2 survivor not already judged, log and notify each verdict.
+
+    Same ok/parcial/falha discipline as app.ingest.ingerir — written as
+    'falha' before any work starts, promoted at the end, so a killed
+    process leaves a record that says it failed, which is true.
+    """
+    perfil = perfil or carregar()
+    orcamento = Orcamento(teto_usd) if teto_usd is not None else Orcamento()
+
+    with pool.connection() as conn:
+        execucao_id = conn.execute(
+            INICIAR_EXECUCAO_SQL, (data_inicial, data_final)
+        ).fetchone()[0]
+
+    avaliados = 0
+    relevantes = 0
+    falhas_finalista = 0
+    erro = None
+
+    try:
+        resultado_ingest = ingerir(data_inicial, data_final)
+        if resultado_ingest["status"] == "falha":
+            raise PncpIndisponivel(resultado_ingest["erro"] or "ingestao falhou")
+        indexar()
+
+        with pool.connection() as conn:
+            finalistas = selecionar_finalistas(conn, perfil)
+        if limite_finalistas is not None:
+            finalistas = finalistas[:limite_finalistas]
+
+        for candidato in finalistas:
+            edital = _para_edital(candidato)
+            with pool.connection() as conn:
+                try:
+                    decisao = julgar_com_agente(
+                        edital, perfil, conn=conn, orcamento=orcamento, modelo=modelo
+                    )
+                except TetoEstourado as e:
+                    erro = str(e)
+                    break
+                except Exception as e:
+                    # A bad candidate (corrupted document, malformed
+                    # response) must not take the rest of the window down
+                    # with it — logged and counted, not swallowed silently:
+                    # falhas_finalista shows up in the run's own summary.
+                    log.warning(
+                        "falha ao julgar %s: %s", edital["numero_controle_pncp"], e
+                    )
+                    falhas_finalista += 1
+                    continue
+
+                decisao_id = registrar_log(conn, edital["numero_controle_pncp"], decisao)
+                notificar_se_relevante(conn, decisao_id, decisao)
+
+            avaliados += 1
+            if decisao.classe == "relevante":
+                relevantes += 1
+    except PncpIndisponivel as e:
+        erro = str(e)
+
+    if erro and avaliados:
+        status = "parcial"
+    elif erro:
+        status = "falha"
+    else:
+        status = "ok"
+
+    with pool.connection() as conn:
+        conn.execute(
+            FINALIZAR_EXECUCAO_SQL,
+            (status, avaliados, relevantes, erro, execucao_id),
+        )
+
+    return {
+        "execucao_id": execucao_id,
+        "status": status,
+        "candidatos_avaliados": avaliados,
+        "decisoes_relevantes": relevantes,
+        "falhas_finalista": falhas_finalista,
+        "erro": erro,
+    }
+
+
+def main():
+    import argparse
+
+    p = argparse.ArgumentParser(description="Roda o agente de monitoramento numa janela de datas")
+    p.add_argument("--de", required=True, help="data inicial YYYYMMDD")
+    p.add_argument("--ate", required=True, help="data final YYYYMMDD")
+    p.add_argument("--teto-usd", type=float, default=None)
+    p.add_argument("--limite-finalistas", type=int, default=None)
+    p.add_argument("--modelo", default=MODELO)
+    args = p.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    pool.open()
+    try:
+        resultado = executar_janela(
+            args.de,
+            args.ate,
+            modelo=args.modelo,
+            teto_usd=args.teto_usd,
+            limite_finalistas=args.limite_finalistas,
+        )
+    finally:
+        pool.close()
+
+    print(json.dumps(resultado, indent=2, ensure_ascii=False, default=str))
+    raise SystemExit(0 if resultado["status"] == "ok" else 1)
+
+
+if __name__ == "__main__":
+    main()

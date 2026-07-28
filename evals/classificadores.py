@@ -9,6 +9,10 @@ and the delta between them is the whole story.
 import functools
 import re
 
+# Production parameter, not an eval-only concept — lives in app/embeddings.py
+# so app/agente.py's daily driver uses the same funnel this module measures.
+from app.embeddings import LIMIAR_FUNIL
+
 # What an off-the-shelf keyword alert looks for. This is not a strawman: it is
 # the incumbent approach in this market, and the reason the project exists is
 # the claim that it fails here. Scoring it on labeled data turns that claim
@@ -33,12 +37,6 @@ def alerta_tudo(caso, perfil=None):
 def keyword(caso, perfil=None):
     """The incumbent: substring match on IT vocabulary."""
     return "relevante" if TERMOS_KEYWORD.search(caso["objeto"]) else "nao_relevante"
-
-
-# Chosen by looking at this same evaluation set — see the caveat in run.py.
-# It is a funnel setting, not a decision boundary: the job of layer 2 is to
-# cut volume without losing anything, and let layer 3 decide.
-LIMIAR_FUNIL = 0.45
 
 
 @functools.lru_cache(maxsize=1)

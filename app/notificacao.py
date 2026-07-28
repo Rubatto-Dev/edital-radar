@@ -12,9 +12,16 @@ another judgment call — so it does not cost an LLM turn and is not one of
 the agent's tools in app/agente.py.
 """
 
-import logging
+from __future__ import annotations
 
-from app.agente import DecisaoAgente
+import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Only for the type hints below — app.agente imports this module at
+    # runtime (executar_janela calls notificar_se_relevante), so a
+    # top-level runtime import here would be circular.
+    from app.agente import DecisaoAgente
 
 log = logging.getLogger(__name__)
 
