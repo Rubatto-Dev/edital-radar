@@ -338,6 +338,71 @@ value (`0.0` normalised to `NULL`) and **28.5%** carried a publishing-platform
 prefix that had to be stripped before the text is usable for matching. Both
 transformations happen on ingest.
 
+## Monitoring agent (Phase 2)
+
+```sh
+python -m app.agente --de 20260701 --ate 20260702
+```
+
+Runs the daily loop: ingest the window (reuses `app.ingest`), backfill
+embeddings, select layer-2 finalists not already judged, and hand each one
+to Claude with real tool calling — the model decides whether it needs
+`buscar_no_corpus`, `calcular_prazo`, or (only when the object text alone
+is still `indeterminado`) `baixar_anexo`, then ends the loop by calling
+`registrar_decisao`. Every judgment is logged to `decisao_agente`, and a
+`relevante` verdict marks itself notified (`app/notificacao.py` — an
+auditable record, not a real send; see below). `--teto-usd` and
+`--limite-finalistas` bound cost on a manual run; the daily cron just needs
+`--de`/`--ate` set to yesterday.
+
+A real decision, from a live run against a seeded software-management
+tender (`docker compose up db`, then `python -m app.agente`):
+
+```json
+{
+  "numero_controle_pncp": "99999999000191-1-000001/2026",
+  "classe": "relevante",
+  "lote_misto": false,
+  "ferramentas_chamadas": ["calcular_prazo", "buscar_no_corpus"],
+  "custo_usd": 0.009814,
+  "notificado_em": "2026-07-28T14:32:07Z"
+}
+```
+
+And the loop that actually reaches for the attachment — an object vague
+enough ("conforme edital e anexos") to stay `indeterminado` on the text
+alone, resolved after downloading the real PNCP document:
+
+```
+ferramentas_chamadas: [calcular_prazo, buscar_no_corpus, baixar_anexo]
+classe: nao_relevante
+justificativa: O objeto real é aquisição de sistema fotovoltaico
+  (hardware/infraestrutura de energia), conforme detectado no anexo do
+  edital. A empresa fornece software de gestão (SaaS/ERP) e explicitamente
+  não fornece hardware ou equipamento físico.
+```
+
+### Notification, this phase
+
+No company uses this yet — that starts in Phase 4. Wiring up SMTP or a
+Slack webhook now would be infrastructure with nobody on the other end.
+Notification here is a deterministic rule (`classe == relevante`) applied
+*after* judgment, not a tool the agent decides to call — deciding whether
+to notify isn't a judgment, so it shouldn't cost an LLM turn. `lote_misto`
+is a caveat on a relevant alert, not a reason to withhold it, same
+reasoning as layer 1's soft caveats. Swap in a real channel once there is
+a real company to notify.
+
+### Failure handling
+
+Same `ok`/`parcial`/`falha` discipline as ingestion, logged to
+`agente_execucao`: `ok` when every finalist was judged, `parcial` when the
+run stopped partway (the daily spend cap was hit — `TetoEstourado`), `falha`
+when nothing could be evaluated (PNCP unreachable during ingest). A single
+candidate failing — a corrupted or unreachable attachment, a malformed
+response — does not abort the run; it is caught, logged, and counted in
+`falhas_finalista`, and the next candidate is judged normally.
+
 ## Repository layout
 
 ```
@@ -353,6 +418,9 @@ app/
   llm.py                Cascade layer 3: LLM relevance judgment, structured output
   custo.py              Daily spend cap for layer 3, append-only cost/latency ledger
   consulta.py           /query: free-text search over the indexed corpus, PNCP link
+  ferramentas.py        Pure functions behind the agent's tool calls (Phase 2.1)
+  agente.py             Tool-calling judgment loop + the daily driver (Phase 2.2/2.4)
+  notificacao.py        Notification as an auditable record, not a real send (Phase 2.3)
 tests/
   test_pncp.py          Client retry and text-cleaning contract
   test_ingest.py        Ingestion outcome contract (ok / parcial / falha)
@@ -363,8 +431,15 @@ tests/
   test_custo.py         Spend cap actually caps, only on today's spend
   test_classificadores.py  llm classifier must never bypass the spend cap
   test_consulta.py      Every result carries a citation and a real PNCP link
+  test_ferramentas.py   Agent tools, no real network (httpx.MockTransport)
+  test_agente.py        Per-tender judgment loop: tool wiring, cost, no-decision error
+  test_agente_execucao.py  Daily driver orchestration and ok/parcial/falha
+  test_notificacao.py   The notify-or-not rule and the write, no channel to mock
 sql/
   001_schema.sql        Tables, applied on first container start
+  002_decisao_agente.sql   Agent's auditable decision log
+  003_notificacao.sql      notificado_em column
+  004_agente_execucao.sql  Daily run log, same shape as ingestao_execucao
 docs/
   corpus-notes.md       Findings from the live PNCP API and what they changed
 evals/

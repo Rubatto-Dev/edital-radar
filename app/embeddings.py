@@ -21,6 +21,14 @@ import functools
 # column and re-embedding everything.
 MODELO = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
+# Chosen by looking at the evaluation set (see evals/run.py's method
+# caveats) — a funnel setting, not a decision boundary. At this threshold it
+# keeps every relevant case in the set while discarding most of the live
+# corpus; layer 3 (or the agent) decides the survivors. Lives here, not in
+# evals/, because it is a production parameter the eval harness measures,
+# not an eval-only concept.
+LIMIAR_FUNIL = 0.45
+
 
 @functools.lru_cache(maxsize=1)
 def _modelo():
