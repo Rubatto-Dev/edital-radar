@@ -1,0 +1,47 @@
+name: CI
+
+# Pushes to master and every pull request. Not both for the same commit: the
+# working pattern here is branch -> PR -> merge, so `push` limited to master
+# plus `pull_request` covers each commit exactly once.
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  testes:
+    name: Testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # The model weights, not the wheels. tests/test_embeddings.py runs the
+      # real encoder, so without this every run re-downloads it. Keyed on
+      # app/embeddings.py because MODELO lives there: changing the model must
+      # invalidate the cache, not silently reuse the old weights.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/huggingface
+          key: hf-${{ hashFiles('app/embeddings.py') }}
+
+      # `[embeddings]` pulls torch (~2 GB) and is genuinely needed: four tests
+      # in tests/test_embeddings.py assert real semantic separation — that
+      # medicine under "Sistema de Registro de Preços" lands far from "sistema
+      # de gestão". Those are the tests proving layer 2 does what the README
+      # claims, so skipping them when the extra is absent would leave CI
+      # green while the claim went unchecked.
+      - run: pip install -e ".[dev,embeddings]"
+
+      # No services. The suite runs with no network and no reachable database —
+      # verified by running it against a dead Postgres address, not assumed.
+      - run: pytest -q
