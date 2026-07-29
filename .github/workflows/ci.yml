@@ -45,3 +45,32 @@ jobs:
       # No services. The suite runs with no network and no reachable database —
       # verified by running it against a dead Postgres address, not assumed.
       - run: pytest -q
+
+  eval:
+    name: Eval — gate de regressão
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/huggingface
+          key: hf-${{ hashFiles('app/embeddings.py') }}
+
+      - run: pip install -e ".[dev,embeddings]"
+
+      # No --classificador, so only GRATUITOS run and the job costs nothing.
+      # The paid cascade is measured by hand when there is credit; its baseline
+      # is recorded in evals/baseline.json all the same, so a later manual run
+      # is checked against the same file.
+      #
+      # The gate is regression, not METAS: recall >= 0.85 is unmet by every
+      # classifier (best is cascata_sonnet at 0.846), so gating on the target
+      # would open this red on day one and stay that way.
+      - run: python -m evals.run --check-baseline

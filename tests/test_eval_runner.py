@@ -1,6 +1,12 @@
 """The scoring rules, especially the ones that keep the three classes apart."""
 
-from evals.run import GRATUITOS, avaliar, carregar
+from evals.run import (
+    GRATUITOS,
+    avaliar,
+    carregar,
+    carregar_baseline,
+    comparar_com_baseline,
+)
 from evals import classificadores
 
 PERFIL = {}
@@ -135,3 +141,63 @@ class TestGratuitosNaoGastamDinheiro:
     def test_classificadores_pagos_ficam_fora_da_lista(self):
         for nome in ("llm", "llm_sonnet", "cascata", "cascata_sonnet"):
             assert nome not in GRATUITOS
+
+
+class TestGateDeRegressao:
+    """The gate protects what was achieved, not what is still wanted.
+
+    METAS (recall 0.85) is unmet by every classifier, so gating on it would
+    keep the pipeline red forever and teach everyone to ignore it.
+    """
+
+    BASE = {
+        "medido_em": "2026-07-27",
+        "eval_set": {"casos": 34, "relevantes": 13},
+        "classificadores": {
+            "fixo": {"recall": 1.0, "precisao": 0.542, "deterministico": True},
+            "com_llm": {"recall": 0.692, "precisao": 0.9, "deterministico": False},
+        },
+    }
+
+    def test_repetir_o_baseline_nao_e_regressao(self):
+        atual = {"recall": 1.0, "precisao": 0.542}
+        assert comparar_com_baseline("fixo", atual, self.BASE) == []
+
+    def test_melhorar_nao_e_regressao(self):
+        atual = {"recall": 1.0, "precisao": 0.700}
+        assert comparar_com_baseline("fixo", atual, self.BASE) == []
+
+    def test_qualquer_queda_reprova_o_deterministico(self):
+        # Same input, same output — a drop is changed behaviour, never noise.
+        atual = {"recall": 1.0, "precisao": 0.541}
+        quedas = comparar_com_baseline("fixo", atual, self.BASE)
+        assert len(quedas) == 1
+        assert "precisao" in quedas[0]
+
+    def test_ruido_de_um_caso_e_tolerado_quando_ha_llm(self):
+        # cascata measured 0.900-1.000 precision across runs on an unchanged
+        # pipeline. Failing on that spread would be failing on sampling noise.
+        atual = {"recall": 0.692 - 0.05, "precisao": 0.9}
+        assert comparar_com_baseline("com_llm", atual, self.BASE) == []
+
+    def test_queda_maior_que_um_caso_reprova_mesmo_com_llm(self):
+        atual = {"recall": 0.692 - 0.20, "precisao": 0.9}
+        quedas = comparar_com_baseline("com_llm", atual, self.BASE)
+        assert len(quedas) == 1
+        assert "recall" in quedas[0]
+
+    def test_classificador_sem_baseline_reprova(self):
+        # Never measured means nothing to protect and nothing to trust.
+        # Recording a baseline has to be a deliberate act, not a default.
+        quedas = comparar_com_baseline("novo", {"recall": 1.0, "precisao": 1.0}, self.BASE)
+        assert quedas and "sem baseline" in quedas[0]
+
+    def test_o_baseline_do_repo_descreve_este_pipeline(self):
+        # The file is worth nothing if it drifts from the code. `vetorial` is
+        # left out on purpose: it would load the encoder and turn a unit suite
+        # into a model benchmark — CI covers it with the extra installed.
+        casos, perfil = carregar()
+        baseline = carregar_baseline()
+        for nome in ("alerta_tudo", "keyword"):
+            atual = avaliar(getattr(classificadores, nome), casos, perfil)
+            assert comparar_com_baseline(nome, atual, baseline) == []
