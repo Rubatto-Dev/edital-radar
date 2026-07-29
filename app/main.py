@@ -1,11 +1,16 @@
 import datetime
+import pathlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 
 from app.consulta import buscar
 from app.db import pool
 from app.embeddings import embedar
+from app.metricas import resumo
+
+PAINEL = pathlib.Path(__file__).resolve().parent / "painel.html"
 
 
 @asynccontextmanager
@@ -53,3 +58,19 @@ def query(q: str, limite: int = 5):
         resultados = buscar(conn, vetor, agora, limite)
 
     return {"pergunta": q, "resultados": resultados}
+
+
+@app.get("/metrics")
+def metrics():
+    """Cost, latency and measured quality.
+
+    Touches no database on purpose: both sources are files, so the panel
+    still answers when Postgres is down — which is exactly when someone is
+    looking at a dashboard.
+    """
+    return resumo()
+
+
+@app.get("/painel")
+def painel():
+    return FileResponse(PAINEL, media_type="text/html")

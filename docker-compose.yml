@@ -28,6 +28,12 @@ services:
     volumes:
       - ./app:/app/app:ro
       - ./evals:/app/evals:ro
+      # The cost ledger is written on the host — ingestion and the agent run
+      # from the host venv, not in here — while /painel is served from this
+      # container. Without this mount the panel reports zero calls forever,
+      # which is exactly what it did the first time it was built.
+      # Read-only: the API only ever reads it.
+      - ./data:/app/data:ro
 
 volumes:
   pgdata:
