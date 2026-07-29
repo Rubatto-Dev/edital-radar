@@ -1,6 +1,6 @@
 """The scoring rules, especially the ones that keep the three classes apart."""
 
-from evals.run import avaliar, carregar
+from evals.run import GRATUITOS, avaliar, carregar
 from evals import classificadores
 
 PERFIL = {}
@@ -93,3 +93,45 @@ class TestBaselinesContraOSetReal:
         casos, perfil = carregar()
         for c in (classificadores.alerta_tudo, classificadores.keyword):
             assert avaliar(c, casos, perfil)["passa"] is False
+
+
+class TestGratuitosNaoGastamDinheiro:
+    """CI runs `evals.run` with no `--classificador`, so GRATUITOS is exactly
+    what every push executes. A paid classifier landing in that list turns each
+    commit into an API bill — silently, since the run still succeeds.
+
+    Checked behaviourally rather than by name: any call into app.llm.julgar
+    fails the test, so a new paid classifier is caught even if nobody thought
+    to add it to a list of forbidden names.
+    """
+
+    def test_nenhum_classificador_gratuito_chama_a_api(self, monkeypatch):
+        def julgar_proibido(*args, **kwargs):
+            raise AssertionError("classificador em GRATUITOS chamou a API paga")
+
+        monkeypatch.setattr("app.llm.julgar", julgar_proibido)
+        # Layer 2's model load is the other cost CI pays, in time rather than
+        # money. Stubbed so this stays a wiring test, not an embedding benchmark.
+        monkeypatch.setattr(
+            "app.embeddings.embedar", lambda textos: [[0.1] * 384 for _ in textos]
+        )
+
+        perfil = {
+            "descricao_curta": "software de gestao publica",
+            "fornece": ["sistema web de gestao"],
+        }
+        caso = {"objeto": "sistema de gestao para prefeitura"}
+
+        classificadores._vetor.cache_clear()
+        classificadores._vetor_do_perfil.cache_clear()
+        try:
+            for nome in GRATUITOS:
+                getattr(classificadores, nome)(caso, perfil)
+        finally:
+            # The stubbed vectors must not outlive the test in the shared cache.
+            classificadores._vetor.cache_clear()
+            classificadores._vetor_do_perfil.cache_clear()
+
+    def test_classificadores_pagos_ficam_fora_da_lista(self):
+        for nome in ("llm", "llm_sonnet", "cascata", "cascata_sonnet"):
+            assert nome not in GRATUITOS

@@ -29,6 +29,13 @@ PERFIL = RAIZ / "perfil-empresa.yaml"
 
 METAS = {"recall": 0.85, "precisao": 0.60}
 
+# Only these run by default. Everything else hits the real, paid API — they
+# require an explicit `--classificador`, never by omission. Module scope, not
+# a local in main(), so CI and the test suite can assert against the same list
+# the runner actually uses: this is what stops a distracted commit from making
+# every push spend money.
+GRATUITOS = ["alerta_tudo", "keyword", "vetorial"]
+
 # Printed on every run, because these numbers are quotable and two of them
 # are easy to quote wrongly.
 RESSALVAS_DE_METODO = [
@@ -147,10 +154,6 @@ def main():
         "llm_sonnet": classificadores.llm_sonnet,
         "cascata_sonnet": classificadores.cascata_sonnet,
     }
-    # Only these run by default. Everything else hits the real, paid API —
-    # they require an explicit `--classificador`, never by omission.
-    GRATUITOS = ["alerta_tudo", "keyword", "vetorial"]
-
     p = argparse.ArgumentParser()
     p.add_argument("--classificador", choices=list(disponiveis), action="append")
     p.add_argument("--json", action="store_true")

@@ -1,0 +1,36 @@
+name: CI
+
+# Pushes to master and every pull request. Not both for the same commit: the
+# working pattern here is branch -> PR -> merge, so `push` limited to master
+# plus `pull_request` covers each commit exactly once.
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  testes:
+    name: Testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # `[dev]` only. `[embeddings]` pulls torch (~2 GB) and nothing here needs
+      # it: the suite stubs app.embeddings.embedar, and app/embeddings.py imports
+      # sentence-transformers lazily inside _modelo(). The eval job that does
+      # need it arrives with the regression gate (RUB-97).
+      - run: pip install -e ".[dev]"
+
+      # No services. The suite runs with no network and no reachable database —
+      # verified by running it against a dead Postgres address, not assumed.
+      - run: pytest -q
