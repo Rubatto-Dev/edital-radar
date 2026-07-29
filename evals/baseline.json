@@ -1,0 +1,47 @@
+{
+  "_leia_isto": [
+    "Baseline de regressão, não alvo. METAS (recall 0.85 / precisão 0.60) em evals/run.py",
+    "continua sendo o alvo do produto e NÃO é atingido por ninguém aqui — o melhor é",
+    "cascata_sonnet com 0.846. Travar o CI no alvo deixaria o pipeline vermelho para",
+    "sempre; travar na regressão protege o que já foi conquistado. Perseguir o alvo",
+    "nestes mesmos 34 casos seria overfitting, decisão registrada na Fase 1.6.",
+    "Números de 2026-07-27, medidos contra a API real. Atualizar este arquivo é um ato",
+    "deliberado: a mudança aparece no diff e precisa de justificativa no PR."
+  ],
+  "medido_em": "2026-07-27",
+  "eval_set": {
+    "casos": 34,
+    "relevantes": 13
+  },
+  "classificadores": {
+    "alerta_tudo": {
+      "recall": 1.0,
+      "precisao": 0.382,
+      "deterministico": true
+    },
+    "keyword": {
+      "recall": 1.0,
+      "precisao": 0.448,
+      "deterministico": true
+    },
+    "vetorial": {
+      "recall": 1.0,
+      "precisao": 0.542,
+      "deterministico": true
+    },
+    "cascata": {
+      "recall": 0.692,
+      "precisao": 0.9,
+      "deterministico": false,
+      "modelo": "claude-haiku-4-5",
+      "nota": "precisão observada entre 0.900 e 1.000 entre execuções; registrado o pior caso"
+    },
+    "cascata_sonnet": {
+      "recall": 0.846,
+      "precisao": 1.0,
+      "deterministico": false,
+      "modelo": "claude-sonnet-5",
+      "nota": "1 caso abaixo da meta de recall — 12/13 exatos seriam necessários"
+    }
+  }
+}

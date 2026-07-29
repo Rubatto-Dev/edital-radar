@@ -26,6 +26,7 @@ import yaml
 RAIZ = Path(__file__).resolve().parent
 CASOS = RAIZ / "eval-set.yaml"
 PERFIL = RAIZ / "perfil-empresa.yaml"
+BASELINE = RAIZ / "baseline.json"
 
 METAS = {"recall": 0.85, "precisao": 0.60}
 
@@ -65,6 +66,49 @@ def carregar():
     casos = yaml.safe_load(CASOS.read_text(encoding="utf-8"))["casos"]
     perfil = yaml.safe_load(PERFIL.read_text(encoding="utf-8"))
     return casos, perfil
+
+
+def carregar_baseline():
+    return json.loads(BASELINE.read_text(encoding="utf-8"))
+
+
+def folga(baseline, deterministico):
+    """How far a metric may fall before it counts as a regression.
+
+    Zero for the deterministic classifiers: same input, same output, so any
+    drop is a real change in behaviour and should stop the build.
+
+    The layer-3 classifiers call an LLM and do not return the same answer every
+    time — `cascata` was measured between 0.900 and 1.000 precision across runs
+    on an unchanged pipeline. Demanding an exact number from them would fail
+    the build on noise. One case worth of slack is the smallest honest unit
+    here: with 13 relevant cases, recall itself only moves in steps of 1/13,
+    so anything finer is not a distinction this eval set can make.
+    """
+    if deterministico:
+        return 0.0
+    return 1 / baseline["eval_set"]["relevantes"]
+
+
+def comparar_com_baseline(nome, resultado, baseline):
+    """Regressions for one classifier, as a list of human-readable lines."""
+    esperados = baseline["classificadores"].get(nome)
+    if esperados is None:
+        # Not an oversight to wave through: a classifier with no recorded
+        # baseline has never been measured, so there is nothing to protect and
+        # nothing to trust. Recording it is a deliberate act.
+        return [f"sem baseline registrado — medir e adicionar a {BASELINE.name}"]
+
+    margem = folga(baseline, esperados["deterministico"])
+    quedas = []
+    for metrica in ("recall", "precisao"):
+        queda = esperados[metrica] - resultado[metrica]
+        if queda > margem + 1e-9:
+            quedas.append(
+                f"{metrica} {resultado[metrica]:.3f} < baseline {esperados[metrica]:.3f}"
+                f" (queda de {queda:.3f}, folga {margem:.3f})"
+            )
+    return quedas
 
 
 def avaliar(classificador, casos, perfil):
@@ -157,6 +201,11 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--classificador", choices=list(disponiveis), action="append")
     p.add_argument("--json", action="store_true")
+    p.add_argument(
+        "--check-baseline",
+        action="store_true",
+        help="falha se algum classificador piorou em relacao a evals/baseline.json",
+    )
     args = p.parse_args()
 
     casos, perfil = carregar()
@@ -176,8 +225,37 @@ def main():
             print(f"  * {linha}")
         print()
 
-    # Non-zero while nothing passes, so this can gate CI in Phase 3.
-    return 0 if any(r["passa"] for r in resultados.values()) else 1
+    if not args.check_baseline:
+        # Reporting is not a pass/fail question. This used to return non-zero
+        # unless some classifier cleared METAS — which is every run today, so
+        # wiring it into CI would open the pipeline permanently red. Worse, it
+        # used `any()`: one baseline scraping past the target would have gone
+        # green while the production cascade was failing. The gate is now
+        # explicit, per classifier, and measured against what was actually
+        # achieved rather than what is still wanted.
+        return 0
+
+    baseline = carregar_baseline()
+    # Messages go to stderr so `--json --check-baseline` keeps stdout parseable.
+    regressoes = {
+        nome: quedas
+        for nome, r in resultados.items()
+        if (quedas := comparar_com_baseline(nome, r, baseline))
+    }
+
+    if not regressoes:
+        print(
+            f"baseline de {baseline['medido_em']}: "
+            f"{len(resultados)} classificador(es), nenhuma regressao",
+            file=sys.stderr,
+        )
+        return 0
+
+    print(f"REGRESSAO contra o baseline de {baseline['medido_em']}:", file=sys.stderr)
+    for nome, quedas in regressoes.items():
+        for queda in quedas:
+            print(f"  {nome}: {queda}", file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":
