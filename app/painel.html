@@ -1,0 +1,105 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>edital-radar — métricas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    color-scheme: light dark;
+    --fg: #16191d; --dim: #616a75; --line: #dfe3e8; --bg: #fff; --card: #f7f8fa;
+    --ok: #1a7f4b; --nao: #a3441f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg: #e7eaee; --dim: #9aa4b0; --line: #2b3138; --bg: #14171a; --card: #1b1f24; }
+  }
+  * { box-sizing: border-box }
+  body {
+    margin: 0; padding: 2rem 1.25rem; background: var(--bg); color: var(--fg);
+    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  main { max-width: 62rem; margin: 0 auto }
+  h1 { font-size: 1.4rem; margin: 0 0 .25rem }
+  h2 { font-size: .95rem; margin: 2.25rem 0 .75rem; letter-spacing: .01em }
+  .sub { color: var(--dim); margin: 0 0 2rem; font-size: .9rem }
+  .cards { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)) }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: .9rem 1rem }
+  .card .rot { color: var(--dim); font-size: .75rem; text-transform: uppercase; letter-spacing: .05em }
+  .card .val { font-size: 1.45rem; margin-top: .3rem; font-variant-numeric: tabular-nums }
+  .card .pe { color: var(--dim); font-size: .78rem; margin-top: .15rem }
+  .scroll { overflow-x: auto }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; min-width: 34rem }
+  th, td { text-align: left; padding: .5rem .65rem; border-bottom: 1px solid var(--line) }
+  th { color: var(--dim); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em }
+  .sim { color: var(--ok) } .nao { color: var(--nao) }
+  .nota { color: var(--dim); font-size: .82rem; margin-top: .8rem }
+  .vazio { color: var(--dim); padding: 1.25rem; border: 1px dashed var(--line); border-radius: 10px }
+</style>
+
+<main>
+  <h1>edital-radar</h1>
+  <p class="sub">Custo, latência e qualidade. Dados de <code>data/custo-ledger.jsonl</code> e <code>evals/baseline.json</code>.</p>
+  <div id="app">carregando…</div>
+</main>
+
+<script>
+const brl = (n, d = 5) => n === null || n === undefined ? "—" : "$" + n.toFixed(d);
+const seg = n => n === null || n === undefined ? "—" : n.toFixed(2) + "s";
+const esc = s => String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+function custoHTML(c) {
+  if (!c.chamadas) {
+    return `<div class="vazio">Nenhuma chamada registrada ainda. O ledger é gitignored,
+      então em clone novo, container ou CI ele não existe — isso é o esperado, não erro.</div>`;
+  }
+  const pctTeto = c.gasto_no_ultimo_dia_usd / c.teto_diario_usd * 100;
+  return `
+    <div class="cards">
+      <div class="card"><div class="rot">Custo por julgamento</div>
+        <div class="val">${brl(c.custo_medio_usd)}</div>
+        <div class="pe">média de ${c.chamadas} chamadas</div></div>
+      <div class="card"><div class="rot">Latência p50</div>
+        <div class="val">${seg(c.latencia_p50_s)}</div>
+        <div class="pe">p95 ${seg(c.latencia_p95_s)}</div></div>
+      <div class="card"><div class="rot">Gasto acumulado</div>
+        <div class="val">${brl(c.custo_total_usd, 4)}</div>
+        <div class="pe">${c.chamadas} chamadas pagas</div></div>
+      <div class="card"><div class="rot">Último dia</div>
+        <div class="val">${brl(c.gasto_no_ultimo_dia_usd, 4)}</div>
+        <div class="pe">${pctTeto.toFixed(0)}% do teto de ${brl(c.teto_diario_usd, 2)}</div></div>
+    </div>
+    <h2>Por dia</h2>
+    <div class="scroll"><table>
+      <tr><th>Data</th><th>Chamadas</th><th>Custo</th></tr>
+      ${c.por_dia.map(d => `<tr><td>${esc(d.data)}</td><td>${d.chamadas}</td><td>${brl(d.custo_usd, 4)}</td></tr>`).join("")}
+    </table></div>`;
+}
+
+function qualidadeHTML(q) {
+  if (!q.disponivel) return `<div class="vazio">Sem <code>evals/baseline.json</code>.</div>`;
+  return `
+    <div class="scroll"><table>
+      <tr><th>Classificador</th><th>Recall</th><th>Precisão</th><th>Determinístico</th><th>Modelo</th><th>Atinge metas</th></tr>
+      ${q.classificadores.map(c => `<tr>
+        <td>${esc(c.nome)}</td><td>${c.recall.toFixed(3)}</td><td>${c.precisao.toFixed(3)}</td>
+        <td>${c.deterministico ? "sim" : "não"}</td><td>${c.modelo ? esc(c.modelo) : "—"}</td>
+        <td class="${c.atinge_metas ? "sim" : "nao"}">${c.atinge_metas ? "sim" : "não"}</td></tr>`).join("")}
+    </table></div>
+    <p class="nota">Medido em ${esc(q.medido_em)} sobre ${q.eval_set.casos} casos
+      (${q.eval_set.relevantes} relevantes). Metas: recall ≥ ${q.metas.recall}, precisão ≥ ${q.metas.precisao}.
+      <strong>Nenhum classificador atinge as metas</strong> — e isso é o estado real, não uma falha do painel.
+      O gate do CI compara contra este baseline (regressão), não contra a meta.</p>
+    <p class="nota">A precisão daqui não transfere para produção: a taxa-base de relevantes é ~38% no eval set
+      e ~0,5% no corpus real. Serve para comparar classificadores entre si, não como número do produto.</p>`;
+}
+
+fetch("metrics")
+  .then(r => r.json())
+  .then(d => {
+    document.getElementById("app").innerHTML =
+      `<h2>Custo e latência</h2>${custoHTML(d.custo)}
+       <h2>Qualidade</h2>${qualidadeHTML(d.qualidade)}`;
+  })
+  .catch(e => {
+    document.getElementById("app").innerHTML =
+      `<div class="vazio">Falha ao carregar /metrics: ${esc(e.message)}</div>`;
+  });
+</script>
