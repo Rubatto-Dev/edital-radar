@@ -35,6 +35,7 @@ from app.llm import MODELO, custo as custo_llm, system_prompt as system_prompt_b
 from app.notificacao import notificar_se_relevante
 from app.perfil import carregar
 from app.pncp import PncpIndisponivel
+from app.tracing import descarregar, ferramenta, observar
 
 log = logging.getLogger(__name__)
 
@@ -92,46 +93,63 @@ def construir_ferramentas(edital: dict, conn):
             limite: quantos resultados no máximo.
         """
         chamadas.append("buscar_no_corpus")
-        # Tool results have to be strings, not raw Python objects — the API
-        # rejects a dict/list content block with a 400 (found the hard way).
-        return json.dumps(buscar_no_corpus(conn, pergunta, limite), default=str)
+        with ferramenta("buscar_no_corpus", pergunta=pergunta, limite=limite) as obs:
+            # Tool results have to be strings, not raw Python objects — the API
+            # rejects a dict/list content block with a 400 (found the hard way).
+            resultado = json.dumps(buscar_no_corpus(conn, pergunta, limite), default=str)
+            obs.update(output=resultado)
+            return resultado
 
     def calcular_prazo_fn() -> str:
         """Calcula a urgência do prazo de proposta deste edital."""
         chamadas.append("calcular_prazo")
-        return json.dumps(calcular_prazo(edital.get("data_encerramento_proposta")))
+        with ferramenta("calcular_prazo") as obs:
+            resultado = json.dumps(calcular_prazo(edital.get("data_encerramento_proposta")))
+            obs.update(output=resultado)
+            return resultado
 
     def baixar_anexo_fn() -> str:
         """Baixa o primeiro anexo deste edital e detecta o tipo real por
         magic bytes. Só chame isso se a classificação continuar
         indeterminada depois de ler o objeto."""
         chamadas.append("baixar_anexo")
-        cnpj = edital.get("cnpj")
-        ano = edital.get("ano_compra")
-        sequencial = edital.get("sequencial_compra")
-        if not (cnpj and ano and sequencial):
-            return json.dumps({"erro": "sem cnpj/ano/sequencial pra localizar anexos"})
 
-        # A real failure here (unreachable PNCP, corrupted download) must not
-        # crash the loop — it becomes something Claude can reason about
-        # (e.g. fall back to indeterminado) instead of an unhandled 500 that
-        # takes the whole daily run down with it.
-        try:
-            anexos = listar_anexos(cnpj, ano, sequencial)
-            if not anexos:
-                return json.dumps({"erro": "nenhum anexo disponível"})
-            info = baixar_anexo(anexos[0]["url"])
-        except httpx.HTTPError as e:
-            return json.dumps({"erro": f"falha ao baixar anexo: {e}"})
+        # Kept as its own function so the early returns below survive
+        # untouched: this is the tool whose failure paths the agent reasons
+        # about, and flattening them to add a span would be rewriting the
+        # part that matters to get at the part that does not.
+        def executar() -> str:
+            cnpj = edital.get("cnpj")
+            ano = edital.get("ano_compra")
+            sequencial = edital.get("sequencial_compra")
+            if not (cnpj and ano and sequencial):
+                return json.dumps({"erro": "sem cnpj/ano/sequencial pra localizar anexos"})
 
-        return json.dumps(
-            {
-                "titulo": anexos[0]["titulo"],
-                "tipo_declarado": info["tipo_declarado"],
-                "tipo_detectado": info["tipo_detectado"],
-                "tamanho_bytes": info["tamanho_bytes"],
-            }
-        )
+            # A real failure here (unreachable PNCP, corrupted download) must not
+            # crash the loop — it becomes something Claude can reason about
+            # (e.g. fall back to indeterminado) instead of an unhandled 500 that
+            # takes the whole daily run down with it.
+            try:
+                anexos = listar_anexos(cnpj, ano, sequencial)
+                if not anexos:
+                    return json.dumps({"erro": "nenhum anexo disponível"})
+                info = baixar_anexo(anexos[0]["url"])
+            except httpx.HTTPError as e:
+                return json.dumps({"erro": f"falha ao baixar anexo: {e}"})
+
+            return json.dumps(
+                {
+                    "titulo": anexos[0]["titulo"],
+                    "tipo_declarado": info["tipo_declarado"],
+                    "tipo_detectado": info["tipo_detectado"],
+                    "tamanho_bytes": info["tamanho_bytes"],
+                }
+            )
+
+        with ferramenta("baixar_anexo") as obs:
+            resultado = executar()
+            obs.update(output=resultado)
+            return resultado
 
     def registrar_decisao_fn(classe: str, justificativa: str, lote_misto: bool) -> str:
         """Registra a decisão final. SEMPRE a última coisa que você faz.
@@ -144,6 +162,16 @@ def construir_ferramentas(edital: dict, conn):
         decisao_capturada.update(
             classe=classe, justificativa=justificativa, lote_misto=lote_misto
         )
+        # Traced like the others: this is the terminal tool, so its span is
+        # what shows the loop actually reached a verdict rather than running
+        # out of turns.
+        with ferramenta(
+            "registrar_decisao",
+            classe=classe,
+            justificativa=justificativa,
+            lote_misto=lote_misto,
+        ) as obs:
+            obs.update(output="decisão registrada")
         return "decisão registrada"
 
     funcoes = {
@@ -184,26 +212,52 @@ def julgar_com_agente(
         f"Prazo de proposta: {edital.get('data_encerramento_proposta')}\n"
     )
 
-    inicio = time.monotonic()
-    runner = client.beta.messages.tool_runner(
-        model=modelo,
-        max_tokens=1024,
-        system=system_prompt(perfil),
-        tools=tools,
-        messages=[{"role": "user", "content": mensagem_usuario}],
-    )
+    # The tool spans built in construir_ferramentas nest under this one on
+    # their own: the SDK propagates context, so the trace ends up shaped like
+    # the decision — which tools were reached for, in what order, before the
+    # verdict. That shape is the audit trail decisao_agente records in SQL,
+    # here made visible.
+    with observar(
+        "julgar_com_agente",
+        as_type="agent",
+        input={
+            "objeto": edital.get("objeto"),
+            "numero_controle_pncp": edital.get("numero_controle_pncp"),
+        },
+    ) as obs:
+        inicio = time.monotonic()
+        runner = client.beta.messages.tool_runner(
+            model=modelo,
+            max_tokens=1024,
+            system=system_prompt(perfil),
+            tools=tools,
+            messages=[{"role": "user", "content": mensagem_usuario}],
+        )
 
-    custo_total = 0.0
-    for mensagem in runner:
-        uso = getattr(mensagem, "usage", None)
-        if uso is not None:
-            custo_total += custo_llm(uso, modelo)
-    latencia = time.monotonic() - inicio
+        custo_total = 0.0
+        for mensagem in runner:
+            uso = getattr(mensagem, "usage", None)
+            if uso is not None:
+                custo_total += custo_llm(uso, modelo)
+        latencia = time.monotonic() - inicio
 
-    if not decisao_capturada:
-        raise RuntimeError(
-            "o agente terminou o loop sem chamar registrar_decisao — "
-            f"ferramentas chamadas: {chamadas}"
+        if not decisao_capturada:
+            raise RuntimeError(
+                "o agente terminou o loop sem chamar registrar_decisao — "
+                f"ferramentas chamadas: {chamadas}"
+            )
+
+        obs.update(
+            output=dict(decisao_capturada),
+            metadata={
+                "ferramentas_chamadas": chamadas,
+                "modelo": modelo,
+                "latencia_s": latencia,
+            },
+            # Reported once, here. The tool_runner's own calls do not go
+            # through app.llm.julgar, so there is no inner generation
+            # reporting the same spend twice.
+            cost_details={"total": custo_total},
         )
 
     resultado = DecisaoAgente(
@@ -435,6 +489,9 @@ def main():
         )
     finally:
         pool.close()
+        # The SDK batches in the background, so a CLI run this short would
+        # exit with the traces still queued.
+        descarregar()
 
     print(json.dumps(resultado, indent=2, ensure_ascii=False, default=str))
     raise SystemExit(0 if resultado["status"] == "ok" else 1)

@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass
 
 from app.perfil import carregar
+from app.tracing import observar
 
 MODELO = "claude-haiku-4-5"
 
@@ -107,19 +108,35 @@ def julgar(
     if orcamento is not None:
         orcamento.verificar()
 
-    inicio = time.monotonic()
-    resposta = client.messages.create(
-        model=modelo,
-        max_tokens=512,
-        system=system_prompt(perfil),
-        output_config={"format": {"type": "json_schema", "schema": SCHEMA}},
-        messages=[{"role": "user", "content": f"Objeto da licitação: {objeto.strip()}"}],
-    )
-    latencia = time.monotonic() - inicio
+    with observar("julgar", as_type="generation", model=modelo, input=objeto.strip()) as obs:
+        inicio = time.monotonic()
+        resposta = client.messages.create(
+            model=modelo,
+            max_tokens=512,
+            system=system_prompt(perfil),
+            output_config={"format": {"type": "json_schema", "schema": SCHEMA}},
+            messages=[{"role": "user", "content": f"Objeto da licitação: {objeto.strip()}"}],
+        )
+        latencia = time.monotonic() - inicio
 
-    texto = next(b.text for b in resposta.content if b.type == "text")
-    dados = json.loads(texto)
-    custo_usd = custo(resposta.usage, modelo)
+        texto = next(b.text for b in resposta.content if b.type == "text")
+        dados = json.loads(texto)
+        custo_usd = custo(resposta.usage, modelo)
+
+        obs.update(
+            output=dados,
+            usage_details={
+                "input": resposta.usage.input_tokens,
+                "output": resposta.usage.output_tokens,
+                "cache_read_input_tokens": getattr(
+                    resposta.usage, "cache_read_input_tokens", 0
+                ) or 0,
+            },
+            # Deliberately the same figure app/custo.py writes to the ledger,
+            # not a second estimate: two independent numbers for one call is
+            # how a cost dashboard starts disagreeing with the bill.
+            cost_details={"total": custo_usd},
+        )
 
     julgamento = Julgamento(
         classe=dados["classe"],
