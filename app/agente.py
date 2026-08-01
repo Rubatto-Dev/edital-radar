@@ -376,6 +376,52 @@ UPDATE agente_execucao
 """
 
 
+def _status_final(erro: str | None, avaliados: int) -> str:
+    """ok / parcial / falha. `parcial` exists because a window that judged some
+    candidates before the spend cap tripped is not the same outcome as one that
+    never got off the ground, and the difference matters when reading the log."""
+    if erro and avaliados:
+        return "parcial"
+    return "falha" if erro else "ok"
+
+
+def _julgar_finalistas(finalistas, perfil, orcamento, modelo):
+    """Judges each finalist, logging and notifying, and returns
+    (avaliados, relevantes, falhas, erro).
+
+    Split out of `executar_janela` so the orchestration up there reads as the
+    handful of steps it is, and the per-candidate failure policy lives in one
+    place: the spend cap stops the whole window, anything else costs exactly
+    one candidate and the run continues.
+    """
+    avaliados = relevantes = falhas = 0
+
+    for candidato in finalistas:
+        edital = _para_edital(candidato)
+        with pool.connection() as conn:
+            try:
+                decisao = julgar_com_agente(
+                    edital, perfil, conn=conn, orcamento=orcamento, modelo=modelo
+                )
+            except TetoEstourado as e:
+                return avaliados, relevantes, falhas, str(e)
+            except Exception as e:  # noqa: BLE001 — one bad candidate must not abort the window
+                # Logged and counted, not swallowed silently: falhas_finalista
+                # shows up in the run's own summary.
+                log.warning("falha ao julgar %s: %s", edital["numero_controle_pncp"], e)
+                falhas += 1
+                continue
+
+            decisao_id = registrar_log(conn, edital["numero_controle_pncp"], decisao)
+            notificar_se_relevante(conn, decisao_id, decisao)
+
+        avaliados += 1
+        if decisao.classe == "relevante":
+            relevantes += 1
+
+    return avaliados, relevantes, falhas, None
+
+
 def executar_janela(
     data_inicial: str,
     data_final: str,
@@ -415,42 +461,13 @@ def executar_janela(
         if limite_finalistas is not None:
             finalistas = finalistas[:limite_finalistas]
 
-        for candidato in finalistas:
-            edital = _para_edital(candidato)
-            with pool.connection() as conn:
-                try:
-                    decisao = julgar_com_agente(
-                        edital, perfil, conn=conn, orcamento=orcamento, modelo=modelo
-                    )
-                except TetoEstourado as e:
-                    erro = str(e)
-                    break
-                except Exception as e:  # noqa: BLE001 — one bad candidate must not abort the window
-                    # A bad candidate (corrupted document, malformed
-                    # response) must not take the rest of the window down
-                    # with it — logged and counted, not swallowed silently:
-                    # falhas_finalista shows up in the run's own summary.
-                    log.warning(
-                        "falha ao julgar %s: %s", edital["numero_controle_pncp"], e
-                    )
-                    falhas_finalista += 1
-                    continue
-
-                decisao_id = registrar_log(conn, edital["numero_controle_pncp"], decisao)
-                notificar_se_relevante(conn, decisao_id, decisao)
-
-            avaliados += 1
-            if decisao.classe == "relevante":
-                relevantes += 1
+        avaliados, relevantes, falhas_finalista, erro = _julgar_finalistas(
+            finalistas, perfil, orcamento, modelo
+        )
     except PncpIndisponivel as e:
         erro = str(e)
 
-    if erro and avaliados:
-        status = "parcial"
-    elif erro:
-        status = "falha"
-    else:
-        status = "ok"
+    status = _status_final(erro, avaliados)
 
     with pool.connection() as conn:
         conn.execute(

@@ -62,7 +62,12 @@ select = [
 "tests/*" = ["DTZ005", "DTZ011"]
 
 [tool.coverage.run]
-source = ["app", "evals"]
+# source_pkgs, not source: with `source` coverage treats each entry as a root
+# and writes `agente.py` into the XML, which SonarQube then cannot resolve
+# against the project — it reports 0% and the gate fails for a reason that has
+# nothing to do with the tests. As packages, the paths keep their prefix.
+source_pkgs = ["app", "evals"]
+relative_files = true
 
 [tool.coverage.report]
 exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]

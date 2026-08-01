@@ -31,6 +31,8 @@ class _Silencioso:
     """
 
     def update(self, **_):
+        # Intentionally empty: this is the null object. Swallowing the call is
+        # the whole behaviour, so that callers never branch on tracing state.
         pass
 
 
