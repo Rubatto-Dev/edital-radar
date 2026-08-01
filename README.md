@@ -109,7 +109,10 @@ will consume, so the eval loop stays decoupled from Postgres.
 - FastAPI + PostgreSQL/pgvector + Docker
 - `sentence-transformers` for embeddings (local, zero marginal cost)
 - Claude Haiku 4.5 for relevance judgment and summarization
-- Langfuse (self-hosted) for tracing and evaluation
+- Langfuse Cloud for tracing — *not* self-hosted: the official minimums sum
+  to ~25.5 GiB (web+worker 8, ClickHouse 8 and mandatory, Postgres 4, MinIO 4,
+  Redis 1.5) against 8.1 GiB free on the development machine. That is
+  arithmetic, not preference.
 
 ## Corpus notes
 
@@ -402,6 +405,78 @@ when nothing could be evaluated (PNCP unreachable during ingest). A single
 candidate failing — a corrupted or unreachable attachment, a malformed
 response — does not abort the run; it is caught, logged, and counted in
 `falhas_finalista`, and the next candidate is judged normally.
+
+## Operations (Phase 3)
+
+What separates a demo from something you can run: a CI that gates on quality,
+tracing that cannot take the caller down, and a panel that reads cost and
+quality from the same numbers the pipeline already writes. 139 tests, two CI
+jobs, and none of it needs an API key to stay green.
+
+### The gate protects what was achieved, not what was hoped for
+
+`METAS` asks for recall ≥ 0.85 and nothing reaches it — the best classifier
+(`cascata_sonnet`) measures 0.846. A gate on that target would keep the
+pipeline red permanently, and a permanently red pipeline teaches everyone to
+ignore CI. So `METAS` stays documented as the product's target, and the gate
+compares against a versioned baseline (`evals/baseline.json`) instead.
+
+Tolerance is per classifier, and it is not a magic number:
+
+- **Deterministic** (`alerta_tudo`, `keyword`, `vetorial`): zero slack. Same
+  input, same output — any drop is a behaviour change.
+- **Layer 3** (`cascata`, `cascata_sonnet`): one case of slack, because
+  precision measured between 0.900 and 1.000 across runs with the pipeline
+  unchanged. Demanding an exact figure from an LLM is failing builds on
+  sampling noise.
+
+A classifier with no registered baseline **fails** rather than passing
+quietly: never measured means nothing to protect and nothing to trust.
+
+The eval job runs only the free classifiers, enforced behaviourally rather
+than by name — any call reaching `app.llm.julgar` fails the test, so a paid
+classifier entering the default set is caught even if nobody maintains a list
+of banned names.
+
+### What a judgment costs
+
+Measured against the live API, not estimated — 56 real calls:
+
+| metric | value |
+|---|---|
+| calls | 56 |
+| total spend | US$ 0.175188 |
+| **cost per judgment** | **US$ 0.003128** |
+| latency p50 | 3.797 s |
+| latency p95 | 18.194 s |
+
+Percentiles are nearest-rank, not interpolated: with dozens of samples, an
+interpolated p95 invents a latency nobody observed.
+
+### Tracing
+
+`app/tracing.py` holds the whole seam, so `llm.py` and `agente.py` don't each
+carry a copy of the on/off switch. Two properties matter more than the
+instrumentation itself: it is **off without a key** (CI has none and must stay
+green) and **never fatal** (an exporter that raises in the caller is
+observability taking down the judgment it exists to observe).
+
+Cost is reported once, and it is the same number the ledger receives. Two
+independent numbers for one call is how a cost dashboard starts disagreeing
+with the invoice.
+
+### Panel
+
+`GET /metrics` (JSON) and `GET /painel` (self-contained HTML, no dependency).
+Nothing new is collected — the ledger has existed since layer 3 and the
+baseline since the gate; this is the first thing that reads both together.
+
+`/metrics` deliberately **does not touch the database**: both sources are
+files, so the panel still answers with Postgres down, which is precisely when
+somebody opens a dashboard. Target and achievement are shown as separate
+things, because a panel that blends them reports aspiration as result. There
+is no hallucination rate on it yet — nothing measures one, and a panel with a
+metric nobody computed is worse than a panel without it.
 
 ## Repository layout
 
