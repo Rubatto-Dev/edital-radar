@@ -53,7 +53,7 @@ def query(q: str, limite: int = 5):
         raise HTTPException(status_code=422, detail="q não pode ser vazio")
 
     vetor = embedar([q])[0]
-    agora = datetime.datetime.now(datetime.timezone.utc)
+    agora = datetime.datetime.now(datetime.UTC)
     with pool.connection() as conn:
         resultados = buscar(conn, vetor, agora, limite)
 

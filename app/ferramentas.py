@@ -56,7 +56,7 @@ def buscar_no_corpus(conn, pergunta: str, limite: int = 5) -> list[dict]:
     """Semantic search over the already-indexed corpus — same citation/link
     as /query (app/consulta.py); this just embeds the question first."""
     vetor = embedar([pergunta])[0]
-    agora = datetime.datetime.now(datetime.timezone.utc)
+    agora = datetime.datetime.now(datetime.UTC)
     return buscar_corpus(conn, vetor, agora, limite)
 
 
@@ -79,7 +79,7 @@ def calcular_prazo(data_encerramento_proposta, agora=None) -> dict:
             data_encerramento_proposta
         )
 
-    agora = agora or datetime.datetime.now(datetime.timezone.utc)
+    agora = agora or datetime.datetime.now(datetime.UTC)
     dias = (data_encerramento_proposta - agora).days
 
     if dias < 0:

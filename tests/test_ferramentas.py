@@ -87,7 +87,7 @@ class TestBuscarNoCorpus:
 
 
 class TestCalcularPrazo:
-    AGORA = datetime.datetime(2026, 7, 27, tzinfo=datetime.timezone.utc)
+    AGORA = datetime.datetime(2026, 7, 27, tzinfo=datetime.UTC)
 
     def test_sem_prazo_nao_e_erro(self):
         assert calcular_prazo(None, agora=self.AGORA) == {

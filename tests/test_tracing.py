@@ -80,10 +80,9 @@ class TestNuncaFatal:
 class TestNaoInterfereNoCaller:
     def test_erro_do_corpo_propaga_com_tracing_desligado(self, desligado):
         # Tracing must never swallow the caller's own failure.
-        with pytest.raises(ValueError, match="boom"):
-            with tracing.observar("julgar") as obs:
-                obs.update(output="nada")
-                raise ValueError("boom")
+        with pytest.raises(ValueError, match="boom"), tracing.observar("julgar") as obs:
+            obs.update(output="nada")
+            raise ValueError("boom")
 
     def test_erro_do_corpo_propaga_com_sdk_quebrado(self, com_chaves, monkeypatch):
         import langfuse
@@ -91,6 +90,5 @@ class TestNaoInterfereNoCaller:
         monkeypatch.setattr(
             langfuse, "get_client", lambda: (_ for _ in ()).throw(RuntimeError("x"))
         )
-        with pytest.raises(ValueError, match="boom"):
-            with tracing.observar("julgar"):
-                raise ValueError("boom")
+        with pytest.raises(ValueError, match="boom"), tracing.observar("julgar"):
+            raise ValueError("boom")

@@ -66,7 +66,11 @@ def _paginas(*resultados):
 
 
 def test_sucesso_registra_ok(registro, monkeypatch):
-    monkeypatch.setattr(ingest, "buscar_pagina", _paginas([{"numeroControlePNCP": "x", "objetoCompra": "sistema"}], []))
+    monkeypatch.setattr(
+        ingest,
+        "buscar_pagina",
+        _paginas([{"numeroControlePNCP": "x", "objetoCompra": "sistema"}], []),
+    )
     r = ingest.ingerir("20260701", "20260703")
     assert r["status"] == "ok"
     assert r["erro"] is None
@@ -86,7 +90,10 @@ def test_indisponibilidade_no_meio_registra_parcial(registro, monkeypatch):
     monkeypatch.setattr(
         ingest,
         "buscar_pagina",
-        _paginas([{"numeroControlePNCP": "x", "objetoCompra": "sistema"}], PncpIndisponivel("HTTP 500")),
+        _paginas(
+            [{"numeroControlePNCP": "x", "objetoCompra": "sistema"}],
+            PncpIndisponivel("HTTP 500"),
+        ),
     )
     r = ingest.ingerir("20260701", "20260703")
     # Some pages landed and the window is incomplete. Calling this 'ok' would

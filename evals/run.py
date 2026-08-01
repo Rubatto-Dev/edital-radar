@@ -40,25 +40,25 @@ GRATUITOS = ["alerta_tudo", "keyword", "vetorial"]
 # Printed on every run, because these numbers are quotable and two of them
 # are easy to quote wrongly.
 RESSALVAS_DE_METODO = [
-    "A precisao daqui NAO transfere pra producao. A taxa-base de relevantes "
-    "no eval set e ~38%; no corpus real e ~0,5%. Precisao depende da "
-    "taxa-base, entao o mesmo classificador tem precisao muito menor solto "
-    "no PNCP. Comparar classificadores entre si aqui e valido; citar o "
-    "numero como 'precisao do produto' nao e.",
+    ("A precisao daqui NAO transfere pra producao. A taxa-base de relevantes "
+        "no eval set e ~38%; no corpus real e ~0,5%. Precisao depende da "
+        "taxa-base, entao o mesmo classificador tem precisao muito menor solto "
+        "no PNCP. Comparar classificadores entre si aqui e valido; citar o "
+        "numero como 'precisao do produto' nao e."),
 
-    "Os positivos vieram de busca por palavra-chave sobre objetoCompra. Um "
-    "edital relevante sem esses termos e invisivel pro set — e por isso que "
-    "o baseline keyword marca recall 1,0. O recall real e desconhecido e "
-    "provavelmente menor.",
+    ("Os positivos vieram de busca por palavra-chave sobre objetoCompra. Um "
+        "edital relevante sem esses termos e invisivel pro set — e por isso que "
+        "o baseline keyword marca recall 1,0. O recall real e desconhecido e "
+        "provavelmente menor."),
 
-    "Corrigir ambos na Fase 3: amostra aleatoria do corpus, rotulada as "
-    "cegas, pra estimar taxa-base e recall sem o vies da coleta.",
+    ("Corrigir ambos na Fase 3: amostra aleatoria do corpus, rotulada as "
+        "cegas, pra estimar taxa-base e recall sem o vies da coleta."),
 
-    "O limiar do classificador vetorial (0.45) foi escolhido olhando ESTE "
-    "set. Isso e ajuste no proprio conjunto de avaliacao: o numero dele e "
-    "otimista, e num set novo tende a ser pior. Com 34 casos nao da pra "
-    "separar treino de teste sem inutilizar os dois — assumido, nao "
-    "escondido.",
+    ("O limiar do classificador vetorial (0.45) foi escolhido olhando ESTE "
+        "set. Isso e ajuste no proprio conjunto de avaliacao: o numero dele e "
+        "otimista, e num set novo tende a ser pior. Com 34 casos nao da pra "
+        "separar treino de teste sem inutilizar os dois — assumido, nao "
+        "escondido."),
 ]
 
 

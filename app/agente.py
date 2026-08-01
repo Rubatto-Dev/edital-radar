@@ -31,7 +31,9 @@ from app.ferramentas import baixar_anexo, buscar_no_corpus, calcular_prazo, list
 from app.filtros import candidatos
 from app.indexar import indexar
 from app.ingest import ingerir
-from app.llm import MODELO, custo as custo_llm, system_prompt as system_prompt_base
+from app.llm import MODELO
+from app.llm import custo as custo_llm
+from app.llm import system_prompt as system_prompt_base
 from app.notificacao import notificar_se_relevante
 from app.perfil import carregar
 from app.pncp import PncpIndisponivel
@@ -316,7 +318,7 @@ def ja_julgados(conn) -> set:
     """Tenders that already have a decision on record — skipped so a
     re-run doesn't re-spend on the same candidate."""
     linhas = conn.execute("SELECT DISTINCT numero_controle_pncp FROM decisao_agente").fetchall()
-    return {l[0] for l in linhas}
+    return {linha[0] for linha in linhas}
 
 
 def _para_edital(candidato: dict) -> dict:
@@ -344,7 +346,7 @@ def _para_edital(candidato: dict) -> dict:
 def selecionar_finalistas(conn, perfil: dict, limiar: float = LIMIAR_FUNIL) -> list[dict]:
     """Layer 1 (structured filter, never drops — only caveats) then layer 2
     (funnel) on top of whatever the agent has not already judged."""
-    candidatos_l1 = candidatos(conn, datetime.datetime.now(datetime.timezone.utc), perfil)
+    candidatos_l1 = candidatos(conn, datetime.datetime.now(datetime.UTC), perfil)
     julgados = ja_julgados(conn)
     candidatos_l1 = [c for c in candidatos_l1 if c["numero_controle_pncp"] not in julgados]
     if not candidatos_l1:
@@ -356,7 +358,7 @@ def selecionar_finalistas(conn, perfil: dict, limiar: float = LIMIAR_FUNIL) -> l
 
     return [
         c
-        for c, v in zip(candidatos_l1, vetores)
+        for c, v in zip(candidatos_l1, vetores, strict=True)
         if similaridade(vetor_perfil, v) >= limiar
     ]
 
@@ -423,7 +425,7 @@ def executar_janela(
                 except TetoEstourado as e:
                     erro = str(e)
                     break
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — one bad candidate must not abort the window
                     # A bad candidate (corrupted document, malformed
                     # response) must not take the rest of the window down
                     # with it — logged and counted, not swallowed silently:
