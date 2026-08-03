@@ -125,7 +125,9 @@ class TestSelecionarFinalistas:
         # reaches similaridade at all because it's filtered before embedding.
         monkeypatch.setattr(agente, "similaridade", similaridade_falsa)
 
-        finalistas = selecionar_finalistas(conn=None, perfil={"descricao_curta": "x", "fornece": []})
+        finalistas = selecionar_finalistas(
+            conn=None, perfil={"descricao_curta": "x", "fornece": []}
+        )
 
         assert {f["numero_controle_pncp"] for f in finalistas} == {"a", "b"}
 
@@ -135,7 +137,8 @@ class TestSelecionarFinalistas:
         chamado = []
         monkeypatch.setattr(agente, "embedar", lambda textos: chamado.append(textos) or [])
 
-        assert selecionar_finalistas(conn=None, perfil={"descricao_curta": "x", "fornece": []}) == []
+        perfil = {"descricao_curta": "x", "fornece": []}
+        assert selecionar_finalistas(conn=None, perfil=perfil) == []
         assert chamado == []
 
 

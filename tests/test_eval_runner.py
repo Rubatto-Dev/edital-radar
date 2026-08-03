@@ -1,5 +1,8 @@
 """The scoring rules, especially the ones that keep the three classes apart."""
 
+from typing import ClassVar
+
+from evals import classificadores
 from evals.run import (
     GRATUITOS,
     avaliar,
@@ -7,7 +10,6 @@ from evals.run import (
     carregar_baseline,
     comparar_com_baseline,
 )
-from evals import classificadores
 
 PERFIL = {}
 
@@ -150,7 +152,7 @@ class TestGateDeRegressao:
     keep the pipeline red forever and teach everyone to ignore it.
     """
 
-    BASE = {
+    BASE: ClassVar[dict] = {
         "medido_em": "2026-07-27",
         "eval_set": {"casos": 34, "relevantes": 13},
         "classificadores": {

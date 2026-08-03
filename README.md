@@ -1,13 +1,26 @@
 # edital-radar
 
+[![CI](https://github.com/Rubatto-Dev/edital-radar/actions/workflows/ci.yml/badge.svg)](https://github.com/Rubatto-Dev/edital-radar/actions/workflows/ci.yml)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 Public procurement monitoring for Brazilian software vendors. Tracks daily
 tenders published to the national procurement portal (PNCP), matches them
 against a company profile, and alerts on relevant opportunities — with the
 citation that justifies the match.
 
-**Status:** Phase 1 — ingestion working against the live API; all three
-cascade layers are implemented. The evaluation set was built before the
+**Status:** Phase 3 — the agent runs end to end and the evaluation gate,
+tracing and metrics panel are in CI. The evaluation set was built before the
 system, deliberately.
+
+Three gates run on every pull request, and each protects something already
+measured rather than a target nobody has reached:
+
+| Gate | Enforces |
+|---|---|
+| Tests + coverage | full suite, no network and no database; coverage ratchet at **82%** |
+| Evaluation | no classifier drops below its recorded baseline |
+| Quality | `ruff` lint, `bandit` SAST (**0 findings at every severity**, 1640 lines), `pip-audit` on the dependency tree |
 
 ## The problem
 

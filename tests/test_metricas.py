@@ -5,6 +5,8 @@ CI all start with no ledger. "No calls yet" and "the panel is broken" must not
 look the same, and neither may crash the endpoint.
 """
 
+from typing import ClassVar
+
 from app.metricas import (
     ler_ledger,
     percentil,
@@ -60,7 +62,7 @@ class TestPercentil:
 
 
 class TestResumoDoLedger:
-    REGISTROS = [
+    REGISTROS: ClassVar[list] = [
         {"data": "2026-07-28", "custo_usd": 0.010, "latencia_s": 2.0},
         {"data": "2026-07-29", "custo_usd": 0.002, "latencia_s": 4.0},
         {"data": "2026-07-29", "custo_usd": 0.004, "latencia_s": 6.0},

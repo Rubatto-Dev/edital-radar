@@ -16,5 +16,9 @@ data/custo-ledger.jsonl
 
 .pytest_cache/
 .ruff_cache/
+.coverage
+htmlcov/
 .vscode/
 .idea/
+coverage.xml
+.scannerwork/

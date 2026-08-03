@@ -44,7 +44,42 @@ jobs:
 
       # No services. The suite runs with no network and no reachable database —
       # verified by running it against a dead Postgres address, not assumed.
-      - run: pytest -q
+      #
+      # Coverage is a ratchet, not an aspiration: --cov-fail-under is pinned to
+      # what is measured today, so app code arriving without tests turns the
+      # build red. Same reasoning as the eval gate below — protect what was
+      # achieved rather than gate on a number nobody has reached.
+      - run: pytest -q --cov --cov-report=term-missing --cov-fail-under=82
+
+  qualidade:
+    name: Qualidade — lint, SAST e dependências
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # No embeddings extra: none of these three tools import the code, they
+      # read it. Skipping torch keeps this job under a minute.
+      - run: pip install -e ".[dev]"
+
+      # Lint. The rule set is chosen in pyproject.toml, and the deliberate
+      # exceptions carry a `noqa` with the reason next to them — a silenced
+      # rule with no justification is just a hidden rule.
+      - run: ruff check app evals tests
+
+      # SAST. -ll would only report medium and above; the whole point is that
+      # this repository reports zero at every severity, so nothing is filtered.
+      - run: bandit -r app evals
+
+      # Known CVEs in the dependency tree. This is the check that goes stale on
+      # its own — the code does not change for a dependency to become
+      # vulnerable, so it runs on every build rather than on every edit.
+      - run: pip-audit
 
   eval:
     name: Eval — gate de regressão
