@@ -114,15 +114,17 @@ measured, not assumed.
 A hard daily spend cap (`app/custo.py`) gates every call: exceeded → the
 caller stops and is notified, rather than silently spending past what a
 self-funded intern can absorb. Every attempt — cost and latency — is written
-to an append-only ledger, which doubles as the record Phase 3 (observability)
-will consume, so the eval loop stays decoupled from Postgres.
+to an append-only ledger, which doubles as the record the observability layer
+consumes, so the eval loop stays decoupled from Postgres.
 
 ### Stack
 
 - FastAPI + PostgreSQL/pgvector + Docker
 - `sentence-transformers` for embeddings (local, zero marginal cost)
 - Claude Haiku 4.5 for relevance judgment and summarization
-- Langfuse (self-hosted) for tracing and evaluation
+- Langfuse Cloud for tracing — self-hosting it needs ~25.5 GiB, see
+  [Tracing](#tracing)
+- GitHub Actions for CI, gating on evaluation regressions
 
 ## Corpus notes
 
@@ -416,6 +418,119 @@ candidate failing — a corrupted or unreachable attachment, a malformed
 response — does not abort the run; it is caught, logged, and counted in
 `falhas_finalista`, and the next candidate is judged normally.
 
+## Evaluation gate and observability (Phase 3)
+
+### The gate protects what was achieved, not what is wanted
+
+`METAS` asks for recall ≥ 0.85. Nothing reaches it — the best is
+`cascata_sonnet` at 0.846, one case short of 12/13. Gating CI on that target
+would open the pipeline red and keep it there, and a build that is always red
+is a build everyone learns to ignore.
+
+So the target stays documented and the gate moves. `evals/baseline.json`
+records what was measured, and `python -m evals.run --check-baseline` fails
+when a classifier drops below what it already achieved:
+
+```
+REGRESSAO contra o baseline de 2026-07-27:
+  vetorial: recall 0.000 < baseline 1.000 (queda de 1.000, folga 0.000)
+```
+
+That output is from tightening `LIMIAR_FUNIL` from 0.45 to 0.75 on purpose. A
+gate that has never failed is not a gate.
+
+Chasing 0.85 across these same 34 cases would be tuning against the evaluation
+set — the bias the runner's own method caveats already call out. The honest fix
+is a blind random sample, which is still owed (see below).
+
+### Tolerance is per classifier, and it is not a magic number
+
+| Classifier kind | Slack | Why |
+|---|---|---|
+| Deterministic (`alerta_tudo`, `keyword`, `vetorial`) | none | Same input, same output — a drop is changed behaviour, not noise |
+| Layer 3 (`cascata`, `cascata_sonnet`) | one case | Measured 0.900–1.000 precision across runs on unchanged code |
+
+Demanding an exact figure from an LLM classifier fails the build on sampling
+noise. One case is the smallest honest unit here: with 13 relevant cases,
+recall only moves in steps of 1/13 ≈ 0.077, so nothing finer is a distinction
+this set can make.
+
+A classifier with no recorded baseline **fails** rather than passing quietly.
+Never measured means nothing to protect and nothing to trust.
+
+### CI
+
+Two jobs on every pull request and every push to `master`:
+
+- **Testes** — the full suite on Python 3.12, no services. It runs with no
+  network and no reachable database; that was checked by pointing it at a dead
+  Postgres address, not assumed.
+- **Eval — gate de regressão** — `evals.run --check-baseline`.
+
+The eval job costs nothing: with no `--classificador`, only `GRATUITOS` runs.
+A behavioural guard test enforces that — any call reaching `app.llm.julgar`
+from a default classifier fails the suite, so a paid classifier landing in the
+default set is caught even if nobody maintains a list of forbidden names.
+
+### Tracing
+
+`app/tracing.py` wraps Langfuse behind one seam, with two properties the rest
+depends on:
+
+- **Off without keys.** CI has none and must stay green; the suite must not
+  need a Langfuse account.
+- **Never fatal.** An exporter that can raise into the caller means
+  observability taking down the judgment it was added to observe. A broken SDK
+  degrades to silence.
+
+The agent loop traces as an `agent` observation with its tool calls nested
+underneath, so the trace ends up shaped like the decision — which tools were
+reached for, in what order, before the verdict. That is the same audit trail
+`decisao_agente` records in SQL, made visible.
+
+Cost is reported **once**, and it is the same figure `app/custo.py` writes to
+the ledger rather than a second estimate. Two independent numbers for one call
+is how a cost dashboard starts disagreeing with the bill.
+
+**Langfuse Cloud, not self-hosted**, and the reason is arithmetic. The official
+minimum sums to roughly 25.5 GiB — web and worker 8, ClickHouse 8 (required,
+with no alternative OLAP store supported), Postgres 4, blob storage 4, Redis
+1.5 — against a 15 GiB development machine. The data is public procurement
+text, so nothing confidential leaves.
+
+### The panel
+
+`GET /metrics` returns JSON; `GET /painel` renders it. Both read files only and
+touch no database, so the panel still answers when Postgres is down — which is
+when someone is looking at a dashboard.
+
+Measured over 56 real calls:
+
+| Metric | Value |
+|---|---|
+| Cost per judgment | **US$0.0031** |
+| Latency p50 / p95 | 3.8s / 18.2s |
+| Total spend to date | US$0.175 |
+
+Percentiles are nearest-rank, not interpolated: at tens of samples an
+interpolated p95 invents a latency nobody observed.
+
+A missing ledger is the normal case, not an error — it is gitignored, so a
+fresh clone, the container and CI all start without one. The panel says "no
+calls yet".
+
+### What this does not measure yet
+
+- **Hallucination rate.** Nothing computes it, so the panel does not show it. A
+  dashboard displaying a metric nobody measured is worse than one missing it.
+- **Unbiased recall.** The positives in the evaluation set were collected by
+  keyword search, so `keyword` scores recall 1.000 by construction and the real
+  figure is unknown. The fix is a blind random sample of the live corpus,
+  labeled before any prediction is seen.
+
+Both are the paid half of this phase, and they are gated on API credit rather
+than on effort.
+
 ## Repository layout
 
 ```
@@ -434,6 +549,9 @@ app/
   ferramentas.py        Pure functions behind the agent's tool calls (Phase 2.1)
   agente.py             Tool-calling judgment loop + the daily driver (Phase 2.2/2.4)
   notificacao.py        Notification as an auditable record, not a real send (Phase 2.3)
+  tracing.py            Langfuse seam: off without keys, never fatal (Phase 3.3)
+  metricas.py           Aggregations behind /metrics, no HTTP so it stays testable (Phase 3.4)
+  painel.html           The panel itself — no build step, no dependencies
 tests/
   test_pncp.py          Client retry and text-cleaning contract
   test_ingest.py        Ingestion outcome contract (ok / parcial / falha)
@@ -448,6 +566,10 @@ tests/
   test_agente.py        Per-tender judgment loop: tool wiring, cost, no-decision error
   test_agente_execucao.py  Daily driver orchestration and ok/parcial/falha
   test_notificacao.py   The notify-or-not rule and the write, no channel to mock
+  test_tracing.py       Tracing is invisible when off and harmless when broken
+  test_metricas.py      The panel answers honestly with nothing to report
+.github/
+  workflows/ci.yml      Test suite + the evaluation regression gate
 sql/
   001_schema.sql        Tables, applied on first container start
   002_decisao_agente.sql   Agent's auditable decision log
@@ -458,6 +580,7 @@ docs/
 evals/
   perfil-empresa.yaml   Company profile — defines what "relevant" means
   eval-set.yaml         Labeled real tenders, built pre-implementation
+  baseline.json         Measured numbers the CI regression gate protects
   run.py                Scorer + method caveats printed on every run
   classificadores.py    Baselines to beat
 ```
