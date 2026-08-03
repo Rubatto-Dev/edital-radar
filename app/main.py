@@ -47,13 +47,13 @@ def health():
     }
 
 
-@app.get("/query")
+@app.get("/query", responses={422: {"description": "q vazio ou só espaços"}})
 def query(q: str, limite: int = 5):
     if not q.strip():
         raise HTTPException(status_code=422, detail="q não pode ser vazio")
 
     vetor = embedar([q])[0]
-    agora = datetime.datetime.now(datetime.timezone.utc)
+    agora = datetime.datetime.now(datetime.UTC)
     with pool.connection() as conn:
         resultados = buscar(conn, vetor, agora, limite)
 

@@ -32,8 +32,8 @@ def indexar(lote: int = 256) -> int:
             if not linhas:
                 break
 
-            vetores = embedar([l[1] for l in linhas])
-            for (numero, _), vetor in zip(linhas, vetores):
+            vetores = embedar([linha[1] for linha in linhas])
+            for (numero, _), vetor in zip(linhas, vetores, strict=True):
                 conn.execute(
                     "UPDATE contratacao SET objeto_embedding = %s::vector "
                     "WHERE numero_controle_pncp = %s",

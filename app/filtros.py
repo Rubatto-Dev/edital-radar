@@ -61,14 +61,14 @@ def candidatos(conn, agora, perfil: dict | None = None) -> list[dict]:
     linhas = conn.execute(SQL_CANDIDATOS, {"agora": agora}).fetchall()
     return [
         {
-            "numero_controle_pncp": l[0],
-            "objeto_compra": l[1],
-            "objeto_limpo": l[2],
-            "valor_total_estimado": l[3],
-            "uf_sigla": l[4],
-            "data_encerramento_proposta": l[5],
-            "orgao_razao_social": l[6],
-            "ressalvas": ressalvas(l[4], l[3], perfil),
+            "numero_controle_pncp": linha[0],
+            "objeto_compra": linha[1],
+            "objeto_limpo": linha[2],
+            "valor_total_estimado": linha[3],
+            "uf_sigla": linha[4],
+            "data_encerramento_proposta": linha[5],
+            "orgao_razao_social": linha[6],
+            "ressalvas": ressalvas(linha[4], linha[3], perfil),
         }
-        for l in linhas
+        for linha in linhas
     ]

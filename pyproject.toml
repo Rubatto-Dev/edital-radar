@@ -18,7 +18,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3"]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.16",
+    "bandit>=1.8",
+    "pip-audit>=2.7",
+]
 # Kept out of the default install: torch adds ~2GB, and the API container
 # does not need it. Ingestion and evaluation run from the host venv.
 embeddings = ["sentence-transformers>=3.0"]
@@ -29,3 +35,39 @@ packages = ["app", "evals"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# Chosen, not copied. Each family earned its place by catching something real
+# in this codebase or by guarding a property the project depends on.
+select = [
+    "E", "W", "F",   # pycodestyle + pyflakes — the floor
+    "I",             # import order: noise reduction in every diff
+    "UP",            # pyupgrade — the floor is 3.12, so use it
+    "B",             # bugbear
+    "SIM",           # simplify
+    "DTZ",           # timezone-aware datetimes. This project shipped two
+                     # naive/aware bugs; this family is the guard against a third
+    "BLE",           # blind except — the deliberate ones must say so, with a reason
+    "ISC",           # implicit string concatenation is usually a missing comma
+    "RUF",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# A test's "now" is a fixture, not a clock: naive datetimes there are the
+# point, not an oversight.
+"tests/*" = ["DTZ005", "DTZ011"]
+
+[tool.coverage.run]
+# source_pkgs, not source: with `source` coverage treats each entry as a root
+# and writes `agente.py` into the XML, which SonarQube then cannot resolve
+# against the project — it reports 0% and the gate fails for a reason that has
+# nothing to do with the tests. As packages, the paths keep their prefix.
+source_pkgs = ["app", "evals"]
+relative_files = true
+
+[tool.coverage.report]
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]

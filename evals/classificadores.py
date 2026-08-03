@@ -24,7 +24,7 @@ TERMOS_KEYWORD = re.compile(
 )
 
 
-def alerta_tudo(caso, perfil=None):
+def alerta_tudo(_caso, _perfil=None):
     """Floor: alert on everything. Recall 1.0 by construction.
 
     Worth scoring because it sets the precision a useful system must beat.
@@ -34,7 +34,7 @@ def alerta_tudo(caso, perfil=None):
     return "relevante"
 
 
-def keyword(caso, perfil=None):
+def keyword(caso, _perfil=None):
     """The incumbent: substring match on IT vocabulary."""
     return "relevante" if TERMOS_KEYWORD.search(caso["objeto"]) else "nao_relevante"
 

@@ -8,7 +8,6 @@ import json
 import logging
 
 import httpx
-
 from psycopg.types.json import Jsonb
 
 from app.db import normalizar_valor, pool

@@ -61,4 +61,4 @@ def texto_do_perfil(perfil: dict) -> str:
 
 def similaridade(a: list[float], b: list[float]) -> float:
     """Cosine similarity. Vectors are already normalised, so it is a dot product."""
-    return sum(x * y for x, y in zip(a, b))
+    return sum(x * y for x, y in zip(a, b, strict=True))

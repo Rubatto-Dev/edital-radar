@@ -17,6 +17,7 @@ values and they do not carry equal weight:
 """
 
 import argparse
+import collections
 import json
 import sys
 from pathlib import Path
@@ -40,25 +41,25 @@ GRATUITOS = ["alerta_tudo", "keyword", "vetorial"]
 # Printed on every run, because these numbers are quotable and two of them
 # are easy to quote wrongly.
 RESSALVAS_DE_METODO = [
-    "A precisao daqui NAO transfere pra producao. A taxa-base de relevantes "
-    "no eval set e ~38%; no corpus real e ~0,5%. Precisao depende da "
-    "taxa-base, entao o mesmo classificador tem precisao muito menor solto "
-    "no PNCP. Comparar classificadores entre si aqui e valido; citar o "
-    "numero como 'precisao do produto' nao e.",
+    ("A precisao daqui NAO transfere pra producao. A taxa-base de relevantes "
+        "no eval set e ~38%; no corpus real e ~0,5%. Precisao depende da "
+        "taxa-base, entao o mesmo classificador tem precisao muito menor solto "
+        "no PNCP. Comparar classificadores entre si aqui e valido; citar o "
+        "numero como 'precisao do produto' nao e."),
 
-    "Os positivos vieram de busca por palavra-chave sobre objetoCompra. Um "
-    "edital relevante sem esses termos e invisivel pro set — e por isso que "
-    "o baseline keyword marca recall 1,0. O recall real e desconhecido e "
-    "provavelmente menor.",
+    ("Os positivos vieram de busca por palavra-chave sobre objetoCompra. Um "
+        "edital relevante sem esses termos e invisivel pro set — e por isso que "
+        "o baseline keyword marca recall 1,0. O recall real e desconhecido e "
+        "provavelmente menor."),
 
-    "Corrigir ambos na Fase 3: amostra aleatoria do corpus, rotulada as "
-    "cegas, pra estimar taxa-base e recall sem o vies da coleta.",
+    ("Corrigir ambos na Fase 3: amostra aleatoria do corpus, rotulada as "
+        "cegas, pra estimar taxa-base e recall sem o vies da coleta."),
 
-    "O limiar do classificador vetorial (0.45) foi escolhido olhando ESTE "
-    "set. Isso e ajuste no proprio conjunto de avaliacao: o numero dele e "
-    "otimista, e num set novo tende a ser pior. Com 34 casos nao da pra "
-    "separar treino de teste sem inutilizar os dois — assumido, nao "
-    "escondido.",
+    ("O limiar do classificador vetorial (0.45) foi escolhido olhando ESTE "
+        "set. Isso e ajuste no proprio conjunto de avaliacao: o numero dele e "
+        "otimista, e num set novo tende a ser pior. Com 34 casos nao da pra "
+        "separar treino de teste sem inutilizar os dois — assumido, nao "
+        "escondido."),
 ]
 
 
@@ -111,42 +112,46 @@ def comparar_com_baseline(nome, resultado, baseline):
     return quedas
 
 
+def tipo_de_resultado(rotulo: str, previsto: str) -> str | None:
+    """Names one case's outcome. Split out of `avaliar` deliberately: this is
+    the taxonomy — which mistakes are expensive, which are an honest decline —
+    and the loop that consumes it is only arithmetic. `None` means the case is
+    a true negative, which nothing needs to count.
+
+    - acerto: labeled relevante, called relevante
+    - perdido: labeled relevante, called nao_relevante — the expensive error
+    - abstencao: labeled relevante, called indeterminado — declined, not wrong
+    - falso_positivo: labeled nao_relevante, called relevante
+    - abstencao_correta / chute: labeled indeterminado, declined or answered
+    """
+    if rotulo == "relevante":
+        if previsto == "relevante":
+            return "acerto"
+        return "abstencao" if previsto == "indeterminado" else "perdido"
+    if rotulo == "nao_relevante":
+        return "falso_positivo" if previsto == "relevante" else None
+    return "abstencao_correta" if previsto == "indeterminado" else "chute"
+
+
 def avaliar(classificador, casos, perfil):
     relevantes = [c for c in casos if c["rotulo"] == "relevante"]
     indeterminados = [c for c in casos if c["rotulo"] == "indeterminado"]
 
-    acertos = 0          # labeled relevante, predicted relevante
-    perdidos = []        # labeled relevante, predicted nao_relevante — the expensive error
-    abstencoes = []      # labeled relevante, predicted indeterminado — declined, not wrong
-    falsos_positivos = []
-    chutes = []          # labeled indeterminado, answered with a confident yes/no
-    abstencao_correta = 0
-
+    quantos = collections.Counter()
+    quais = collections.defaultdict(list)
     previstos_relevante = 0
 
     for caso in casos:
         previsto = classificador(caso, perfil)
-        rotulo = caso["rotulo"]
-
         if previsto == "relevante":
             previstos_relevante += 1
 
-        if rotulo == "relevante":
-            if previsto == "relevante":
-                acertos += 1
-            elif previsto == "indeterminado":
-                abstencoes.append(caso["id"])
-            else:
-                perdidos.append(caso["id"])
-        elif rotulo == "nao_relevante":
-            if previsto == "relevante":
-                falsos_positivos.append(caso["id"])
-        else:  # indeterminado
-            if previsto == "indeterminado":
-                abstencao_correta += 1
-            else:
-                chutes.append(caso["id"])
+        tipo = tipo_de_resultado(caso["rotulo"], previsto)
+        if tipo:
+            quantos[tipo] += 1
+            quais[tipo].append(caso["id"])
 
+    acertos = quantos["acerto"]
     recall = acertos / len(relevantes) if relevantes else 0.0
     precisao = acertos / previstos_relevante if previstos_relevante else 0.0
 
@@ -155,12 +160,12 @@ def avaliar(classificador, casos, perfil):
         "precisao": round(precisao, 3),
         "acertos": acertos,
         "relevantes_no_set": len(relevantes),
-        "perdidos": perdidos,
-        "abstencoes_em_relevantes": abstencoes,
-        "falsos_positivos": falsos_positivos,
+        "perdidos": quais["perdido"],
+        "abstencoes_em_relevantes": quais["abstencao"],
+        "falsos_positivos": quais["falso_positivo"],
         "indeterminados_no_set": len(indeterminados),
-        "abstencao_correta": abstencao_correta,
-        "chutes_em_indeterminado": chutes,
+        "abstencao_correta": quantos["abstencao_correta"],
+        "chutes_em_indeterminado": quais["chute"],
         "passa": recall >= METAS["recall"] and precisao >= METAS["precisao"],
     }
 
