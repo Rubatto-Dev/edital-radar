@@ -117,6 +117,21 @@ class TestCalcularPrazo:
         r = calcular_prazo("2026-07-29T00:00:00+00:00", agora=self.AGORA)
         assert r["urgencia"] == "critico"
 
+    def test_aceita_string_sem_fuso(self):
+        # o PNCP devolve data sem offset; `fromisoformat` a lê como naive e a
+        # subtração com um `agora` aware estourava TypeError
+        r = calcular_prazo("2026-07-29T00:00:00", agora=self.AGORA)
+        assert r["urgencia"] == "critico"
+
+    def test_aceita_string_so_data(self):
+        r = calcular_prazo("2026-07-29", agora=self.AGORA)
+        assert r["urgencia"] == "critico"
+
+    def test_aceita_agora_naive(self):
+        agora = self.AGORA.replace(tzinfo=None)
+        prazo = "2026-07-29T00:00:00+00:00"
+        assert calcular_prazo(prazo, agora=agora)["urgencia"] == "critico"
+
 
 class TestListarAnexos:
     def test_tipo_documento_nome_vem_junto_mas_nao_e_a_ultima_palavra(self):
