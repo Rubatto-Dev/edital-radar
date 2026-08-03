@@ -108,7 +108,7 @@ class TestHealth:
         # nothing to ingest.
         import datetime
 
-        quando = datetime.datetime(2026, 7, 28, 10, 0, tzinfo=datetime.timezone.utc)
+        quando = datetime.datetime(2026, 7, 28, 10, 0, tzinfo=datetime.UTC)
         monkeypatch.setattr(main, "pool", _Pool((1,), (1200,), ("parcial", quando)))
 
         corpo = cliente.get("/health").json()
