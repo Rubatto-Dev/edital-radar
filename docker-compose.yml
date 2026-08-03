@@ -3,7 +3,10 @@ services:
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-edital}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-edital}
+      # Required, with no inline default: `:-edital` put a working password in
+      # the file, which is the one that reaches production by accident. Copy
+      # .env.example to .env and compose picks it up.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
       POSTGRES_DB: ${POSTGRES_DB:-edital_radar}
     ports:
       - "${POSTGRES_PORT:-5440}:5432"
@@ -19,7 +22,7 @@ services:
   api:
     build: .
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-edital}:${POSTGRES_PASSWORD:-edital}@db:5432/${POSTGRES_DB:-edital_radar}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-edital}:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}@db:5432/${POSTGRES_DB:-edital_radar}
     ports:
       - "${API_PORT:-8010}:8000"
     depends_on:

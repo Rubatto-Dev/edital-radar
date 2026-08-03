@@ -31,6 +31,8 @@ class _Silencioso:
     """
 
     def update(self, **_):
+        # Intentionally empty: this is the null object. Swallowing the call is
+        # the whole behaviour, so that callers never branch on tracing state.
         pass
 
 
@@ -55,7 +57,7 @@ def observar(nome: str, **atributos):
         from langfuse import get_client
 
         return get_client().start_as_current_observation(name=nome, **atributos)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — observability must never take the caller down
         log.warning("tracing indisponivel, seguindo sem ele: %s", e)
         return contextlib.nullcontext(_Silencioso())
 
@@ -82,5 +84,5 @@ def descarregar() -> None:
         from langfuse import get_client
 
         get_client().flush()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — a failed flush is not the caller's problem
         log.warning("falha ao enviar traces pendentes: %s", e)

@@ -40,17 +40,17 @@ def buscar(conn, vetor, agora, limite: int = 5) -> list[dict]:
     ).fetchall()
     return [
         {
-            "numero_controle_pncp": l[0],
+            "numero_controle_pncp": linha[0],
             # The citation: the tender's own text, verbatim. Not a summary —
             # a summary can be wrong in a way the user can't catch without
             # already knowing the answer.
-            "trecho": l[1],
-            "link": link_pncp(l[0]),
-            "orgao": l[2],
-            "uf": l[3],
-            "valor_total_estimado": l[4],
-            "prazo": l[5].isoformat() if l[5] else None,
-            "similaridade": round(l[6], 3),
+            "trecho": linha[1],
+            "link": link_pncp(linha[0]),
+            "orgao": linha[2],
+            "uf": linha[3],
+            "valor_total_estimado": linha[4],
+            "prazo": linha[5].isoformat() if linha[5] else None,
+            "similaridade": round(linha[6], 3),
         }
-        for l in linhas
+        for linha in linhas
     ]

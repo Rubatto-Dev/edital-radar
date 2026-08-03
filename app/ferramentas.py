@@ -56,12 +56,20 @@ def buscar_no_corpus(conn, pergunta: str, limite: int = 5) -> list[dict]:
     """Semantic search over the already-indexed corpus — same citation/link
     as /query (app/consulta.py); this just embeds the question first."""
     vetor = embedar([pergunta])[0]
-    agora = datetime.datetime.now(datetime.timezone.utc)
+    agora = datetime.datetime.now(datetime.UTC)
     return buscar_corpus(conn, vetor, agora, limite)
 
 
 DIAS_CRITICO = 3
 DIAS_ATENCAO = 7
+
+
+def _em_utc(momento: datetime.datetime) -> datetime.datetime:
+    """A naive datetime means UTC here: the column is `timestamptz` and the
+    PNCP serves deadlines without an offset."""
+    if momento.tzinfo is None:
+        return momento.replace(tzinfo=datetime.UTC)
+    return momento
 
 
 def calcular_prazo(data_encerramento_proposta, agora=None) -> dict:
@@ -79,8 +87,8 @@ def calcular_prazo(data_encerramento_proposta, agora=None) -> dict:
             data_encerramento_proposta
         )
 
-    agora = agora or datetime.datetime.now(datetime.timezone.utc)
-    dias = (data_encerramento_proposta - agora).days
+    agora = agora or datetime.datetime.now(datetime.UTC)
+    dias = (_em_utc(data_encerramento_proposta) - _em_utc(agora)).days
 
     if dias < 0:
         urgencia = "encerrado"

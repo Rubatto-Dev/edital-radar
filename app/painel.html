@@ -40,10 +40,10 @@
   <div id="app">carregando…</div>
 </main>
 
-<script>
+<script type="module">
 const brl = (n, d = 5) => n === null || n === undefined ? "—" : "$" + n.toFixed(d);
 const seg = n => n === null || n === undefined ? "—" : n.toFixed(2) + "s";
-const esc = s => String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+const esc = s => String(s).replaceAll(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
 function custoHTML(c) {
   if (!c.chamadas) {
@@ -91,15 +91,13 @@ function qualidadeHTML(q) {
       e ~0,5% no corpus real. Serve para comparar classificadores entre si, não como número do produto.</p>`;
 }
 
-fetch("metrics")
-  .then(r => r.json())
-  .then(d => {
-    document.getElementById("app").innerHTML =
-      `<h2>Custo e latência</h2>${custoHTML(d.custo)}
-       <h2>Qualidade</h2>${qualidadeHTML(d.qualidade)}`;
-  })
-  .catch(e => {
-    document.getElementById("app").innerHTML =
-      `<div class="vazio">Falha ao carregar /metrics: ${esc(e.message)}</div>`;
-  });
+try {
+  const d = await (await fetch("metrics")).json();
+  document.getElementById("app").innerHTML =
+    `<h2>Custo e latência</h2>${custoHTML(d.custo)}
+     <h2>Qualidade</h2>${qualidadeHTML(d.qualidade)}`;
+} catch (e) {
+  document.getElementById("app").innerHTML =
+    `<div class="vazio">Falha ao carregar /metrics: ${esc(e.message)}</div>`;
+}
 </script>

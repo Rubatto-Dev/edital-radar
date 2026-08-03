@@ -15,7 +15,9 @@ from app.filtros import (
 )
 from app.perfil import CAMINHO_PADRAO, carregar
 
-CASOS = yaml.safe_load(open(CAMINHO_PADRAO.parent / "eval-set.yaml", encoding="utf-8"))["casos"]
+CASOS = yaml.safe_load(
+    (CAMINHO_PADRAO.parent / "eval-set.yaml").read_text(encoding="utf-8")
+)["casos"]
 RELEVANTES = [c for c in CASOS if c["rotulo"] == "relevante"]
 PERFIL = carregar()
 

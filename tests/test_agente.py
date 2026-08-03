@@ -27,6 +27,8 @@ EDITAL = {
     "sequencial_compra": 3,
 }
 
+PERFIL_MINIMO = {"fornece": [], "nao_fornece": [], "descricao_curta": "x"}
+
 
 class TestConstruirFerramentas:
     def test_buscar_no_corpus_delega_e_registra_a_chamada(self, monkeypatch):
@@ -134,7 +136,7 @@ class TestJulgarComAgente:
         monkeypatch.setattr("app.agente.construir_ferramentas", construir_falso)
         cliente = ClienteFalso([_mensagem((100, 20)), _mensagem((50, 10))])
 
-        resultado = julgar_com_agente(EDITAL, perfil={"fornece": [], "nao_fornece": [], "descricao_curta": "x"}, conn=None, client=cliente)
+        resultado = julgar_com_agente(EDITAL, perfil=PERFIL_MINIMO, conn=None, client=cliente)
 
         esperado = custo_llm(_mensagem((100, 20)).usage) + custo_llm(_mensagem((50, 10)).usage)
         assert resultado.custo_usd == pytest.approx(esperado)
@@ -151,7 +153,7 @@ class TestJulgarComAgente:
         monkeypatch.setattr("app.agente.construir_ferramentas", construir_falso)
         cliente = ClienteFalso([_mensagem((10, 5))])
 
-        resultado = julgar_com_agente(EDITAL, perfil={"fornece": [], "nao_fornece": [], "descricao_curta": "x"}, conn=None, client=cliente)
+        resultado = julgar_com_agente(EDITAL, perfil=PERFIL_MINIMO, conn=None, client=cliente)
 
         assert resultado.anexo_baixado is True
 
@@ -163,14 +165,18 @@ class TestJulgarComAgente:
         cliente = ClienteFalso([_mensagem((10, 5))])
 
         with pytest.raises(RuntimeError, match="registrar_decisao"):
-            julgar_com_agente(EDITAL, perfil={"fornece": [], "nao_fornece": [], "descricao_curta": "x"}, conn=None, client=cliente)
+            julgar_com_agente(EDITAL, perfil=PERFIL_MINIMO, conn=None, client=cliente)
 
     def test_teto_estourado_impede_a_chamada(self, monkeypatch, tmp_path):
         from app.custo import Orcamento, TetoEstourado
 
         monkeypatch.setattr(
             "app.agente.construir_ferramentas",
-            lambda edital, conn: ({}, [], {"classe": "relevante", "justificativa": "x", "lote_misto": False}),
+            lambda edital, conn: (
+                {},
+                [],
+                {"classe": "relevante", "justificativa": "x", "lote_misto": False},
+            ),
         )
         orcamento = Orcamento(teto_usd=0.0000001, caminho=tmp_path / "ledger.jsonl")
         orcamento.registrar(1.0)

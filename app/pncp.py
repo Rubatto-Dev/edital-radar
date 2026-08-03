@@ -27,7 +27,7 @@ RETENTAVEIS = {429, 500, 502, 503, 504}
 # "[Portal de Compras Públicas] - ". That is platform metadata leaking into
 # free text — stripped before embedding, or every tender from one platform
 # gains spurious similarity to every other.
-PREFIXO_PLATAFORMA = re.compile(r"^\s*\[[^\]]{1,60}\]\s*[-–]\s*")
+PREFIXO_PLATAFORMA = re.compile(r"^\s*\[[^\]]{1,60}\]\s*[-–]\s*")  # noqa: RUF001 — the EN DASH is deliberate: real tenders use both dashes
 
 
 class PncpIndisponivel(Exception):

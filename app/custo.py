@@ -19,6 +19,14 @@ class TetoEstourado(Exception):
     pass
 
 
+def _hoje_utc() -> str:
+    """The ledger's day key. UTC rather than local time because the file is
+    written from the host and read from the container, which do not share a
+    zone — keying on local time makes the cap count a different "today"
+    depending on where the process ran."""
+    return datetime.datetime.now(datetime.UTC).date().isoformat()
+
+
 class Orcamento:
     def __init__(self, teto_usd: float = TETO_PADRAO_USD, caminho: Path | str = CAMINHO_PADRAO):
         self.teto_usd = teto_usd
@@ -27,7 +35,7 @@ class Orcamento:
     def _gasto_hoje(self) -> float:
         if not self.caminho.exists():
             return 0.0
-        hoje = datetime.date.today().isoformat()
+        hoje = _hoje_utc()
         total = 0.0
         for linha in self.caminho.read_text(encoding="utf-8").splitlines():
             if not linha.strip():
@@ -47,7 +55,7 @@ class Orcamento:
     def registrar(self, custo_usd: float, latencia_s: float = 0.0) -> None:
         self.caminho.parent.mkdir(parents=True, exist_ok=True)
         registro = {
-            "data": datetime.date.today().isoformat(),
+            "data": _hoje_utc(),
             "custo_usd": custo_usd,
             "latencia_s": latencia_s,
         }
